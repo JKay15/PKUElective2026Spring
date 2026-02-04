@@ -85,12 +85,50 @@ def summarize(latencies):
     }
 
 
+def parse_label_from_filename(path):
+    name = os.path.basename(path)
+    stem, _ = os.path.splitext(name)
+    if "_" not in stem:
+        return None
+    # take last underscore segment as label
+    label = stem.split("_")[-1]
+    return label or None
+
+
+def normalize(text):
+    if text is None:
+        return ""
+    # keep alnum only, uppercase
+    return "".join(ch for ch in text if ch.isalnum()).upper()
+
+
+def char_accuracy(gt, pred):
+    gt = normalize(gt)
+    pred = normalize(pred)
+    if not gt and not pred:
+        return 1.0
+    if not gt:
+        return 0.0
+    # align by position; penalize length mismatch
+    max_len = max(len(gt), len(pred))
+    if max_len == 0:
+        return 1.0
+    correct = 0
+    for i in range(max_len):
+        g = gt[i] if i < len(gt) else None
+        p = pred[i] if i < len(pred) else None
+        if g is not None and p is not None and g == p:
+            correct += 1
+    return correct / max_len
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Benchmark Baidu OCR speed on a folder of captcha images")
+    parser = argparse.ArgumentParser(description="Benchmark Baidu OCR speed/accuracy on a folder of captcha images")
     parser.add_argument("--images-dir", required=True, help="folder with captcha images")
     parser.add_argument("--max", type=int, default=None, help="max images to test")
     parser.add_argument("--sleep", type=float, default=0.1, help="sleep between requests")
     parser.add_argument("--timeout", type=float, default=10.0)
+    parser.add_argument("--labels-from-filename", action="store_true", default=True)
     args = parser.parse_args()
 
     api_key, secret_key = load_keys()
@@ -111,6 +149,10 @@ def main():
         fail = 0
         latencies = []
         results = []
+        exact_hits = 0
+        char_scores = []
+        labeled = 0
+
         for path in images:
             with open(path, "rb") as f:
                 img = f.read()
@@ -122,8 +164,16 @@ def main():
                     ok += 1
                     latencies.append(dt)
                     words = data.get("words_result", [])
+                    pred = words[0]["words"] if words else ""
                     results.append((os.path.basename(path), words))
-            except Exception as e:
+                    if args.labels_from_filename:
+                        gt = parse_label_from_filename(path)
+                        if gt:
+                            labeled += 1
+                            if normalize(pred) == normalize(gt):
+                                exact_hits += 1
+                            char_scores.append(char_accuracy(gt, pred))
+            except Exception:
                 fail += 1
             time.sleep(args.sleep)
 
@@ -138,6 +188,13 @@ def main():
             )
         else:
             print("latency(s): n/a")
+
+        if labeled > 0:
+            exact_rate = exact_hits / labeled
+            char_rate = statistics.mean(char_scores) if char_scores else 0.0
+            print(f"accuracy: exact={exact_rate:.3f} char={char_rate:.3f} (labeled={labeled})")
+        else:
+            print("accuracy: n/a (no labels)")
 
         # show a few sample results
         for name, words in results[:5]:

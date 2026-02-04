@@ -217,6 +217,46 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
             raise UserInputException("Invalid baidu_timeout: %r" % v)
 
     @property
+    def captcha_code_length(self):
+        v = self.get_optional("captcha", "code_length")
+        if v is None or v == "":
+            return 4
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid code_length: %r" % v)
+        return max(1, v)
+
+    @property
+    def gemini_api_key(self):
+        return self.get_optional("captcha", "gemini_api_key")
+
+    @property
+    def gemini_model(self):
+        return self.get_optional("captcha", "gemini_model")
+
+    @property
+    def gemini_timeout(self):
+        v = self.get_optional("captcha", "gemini_timeout")
+        if v is None or v == "":
+            return 10.0
+        try:
+            return float(v)
+        except ValueError:
+            raise UserInputException("Invalid gemini_timeout: %r" % v)
+
+    @property
+    def gemini_max_output_tokens(self):
+        v = self.get_optional("captcha", "gemini_max_output_tokens")
+        if v is None or v == "":
+            return 16
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid gemini_max_output_tokens: %r" % v)
+        return max(1, v)
+
+    @property
     def captcha_degrade_failures(self):
         v = self.get_optional("captcha", "degrade_failures")
         if v is None or v == "":

@@ -15,7 +15,8 @@ Date: 2026-02-04
 
 ### Mode: `general_basic`
 - ok: 40, fail: 0
-- latency (s): avg 0.255, median 0.242, p90 0.304, min 0.192, max 0.638
+- latency (s): avg 0.245, median 0.233, p90 0.300, min 0.177, max 0.529
+- accuracy (label from filename, alnum+upper normalized): exact 0.400, char 0.659
 - sample outputs:
   - `synth_0000_TVG2.jpg` -> `3A1`
   - `synth_0001_S6WS.jpg` -> `S6WS`
@@ -25,7 +26,8 @@ Date: 2026-02-04
 
 ### Mode: `accurate_basic`
 - ok: 40, fail: 0
-- latency (s): avg 0.288, median 0.285, p90 0.326, min 0.218, max 0.455
+- latency (s): avg 0.290, median 0.286, p90 0.337, min 0.240, max 0.395
+- accuracy (label from filename, alnum+upper normalized): exact 0.425, char 0.644
 - sample outputs:
   - `synth_0000_TVG2.jpg` -> `TvG2`
   - `synth_0001_S6WS.jpg` -> `sMos`
@@ -35,9 +37,12 @@ Date: 2026-02-04
 
 ## Observations
 - Both modes succeeded on all 40 synthetic samples.
-- `general_basic` was faster on average (~0.255s vs ~0.288s).
-- Recognition accuracy on these synthetic samples is mixed for both modes (sample outputs show errors), which is expected because the generator adds distortions/noise.
+- `general_basic` was faster on average (~0.245s vs ~0.290s).
+- Exact-match accuracy is low for both modes (~40-42.5%), with per-character accuracy around ~0.64-0.66.
+- Accuracy is measured by taking the ground-truth label from the filename, normalizing to `[A-Z0-9]`, and scoring exact match and per-position character match.
+- Given these are synthetic and real captchas are likely harder, production accuracy could be worse.
 
-## Recommendation (based on speed)
+## Recommendation (based on speed + accuracy)
 - Use `general_basic` as the default for faster response.
-- Keep `accurate_basic` as a fallback for repeated validation failures.
+- Do not rely on `accurate_basic` alone for meaningful accuracy gains; it is slightly slower and only marginally better on this synthetic set.
+- If production success rate needs to be >80%, consider a dedicated captcha-recognition service or a human-in-the-loop fallback.

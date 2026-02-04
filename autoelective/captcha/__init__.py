@@ -6,6 +6,7 @@
 from .captcha import Captcha
 from .registry import CaptchaRecognizer, get_recognizer
 from .online import TTShituRecognizer, BaiduOCRRecognizer
+from .gemini import GeminiVLMRecognizer
 
 __all__ = [
     "Captcha",
@@ -13,4 +14,5 @@ __all__ = [
     "get_recognizer",
     "TTShituRecognizer",
     "BaiduOCRRecognizer",
+    "GeminiVLMRecognizer",
 ]

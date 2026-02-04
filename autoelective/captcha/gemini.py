@@ -86,12 +86,7 @@ class GeminiVLMRecognizer(CaptchaRecognizer):
             f"The value must be {len_rule} (A-Z, 0-9) with no spaces.\n"
             "If uncertain, make your best guess.\n"
         )
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            + self._model
-            + ":generateContent?key="
-            + self._api_key
-        )
+        url = "https://generativelanguage.googleapis.com/v1beta/models/" + self._model + ":generateContent"
         payload = {
             "contents": [
                 {
@@ -110,11 +105,18 @@ class GeminiVLMRecognizer(CaptchaRecognizer):
             "generationConfig": {
                 "temperature": 0,
                 "maxOutputTokens": int(self._max_output_tokens),
-                "responseMimeType": "application/json",
             },
         }
         try:
-            resp = self._session.post(url, json=payload, timeout=self._timeout)
+            resp = self._session.post(
+                url,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-goog-api-key": self._api_key,
+                },
+                json=payload,
+                timeout=self._timeout,
+            )
         except requests.Timeout:
             raise OperationTimeoutError(msg="Recognizer connection time out")
         except requests.ConnectionError:

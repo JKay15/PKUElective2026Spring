@@ -17,7 +17,7 @@ class _Resp:
         return self._data
 
 
-def _fake_post_ok(self, url, json=None, timeout=None):
+def _fake_post_ok(self, url, **kwargs):
     return _Resp(
         200,
         {

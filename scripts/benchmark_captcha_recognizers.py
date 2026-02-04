@@ -5,6 +5,12 @@ import argparse
 import os
 import statistics
 import time
+import sys
+
+# Allow running this file directly: `python scripts/benchmark_captcha_recognizers.py ...`
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 from autoelective.captcha import get_recognizer
 from autoelective.exceptions import OperationFailedError, OperationTimeoutError, RecognizerError
@@ -150,4 +156,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

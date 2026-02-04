@@ -4,6 +4,8 @@
 import base64
 import json
 import os
+import re
+import time
 from io import BytesIO
 
 import requests
@@ -47,6 +49,27 @@ def _extract_text_from_gemini_response(data):
         if t:
             texts.append(t)
     return "".join(texts).strip()
+
+def _extract_code_candidate(text, min_len, max_len):
+    if not text:
+        return ""
+
+    # Try to pull JSON key first (works even if extra text wraps the JSON).
+    # Examples:
+    #   {"text":"AB12"}
+    #   JSON: {"text": "AB12"}
+    for pat in (
+        r'"text"\s*:\s*"([A-Za-z0-9]+)"',
+        r"'text'\s*:\s*'([A-Za-z0-9]+)'",
+    ):
+        m = re.search(pat, text)
+        if m:
+            return m.group(1)
+
+    # Otherwise, take the last alnum token within range.
+    tokens = re.findall(r"[A-Za-z0-9]+", text)
+    candidates = [t for t in tokens if min_len <= len(t) <= max_len]
+    return candidates[-1] if candidates else ""
 
 
 @register_recognizer
@@ -107,26 +130,54 @@ class GeminiVLMRecognizer(CaptchaRecognizer):
                 "maxOutputTokens": int(self._max_output_tokens),
             },
         }
-        try:
-            resp = self._session.post(
-                url,
-                headers={
-                    "Content-Type": "application/json",
-                    "X-goog-api-key": self._api_key,
-                },
-                json=payload,
-                timeout=self._timeout,
-            )
-        except requests.Timeout:
-            raise OperationTimeoutError(msg="Recognizer connection time out")
-        except requests.ConnectionError:
-            raise OperationFailedError(msg="Unable to connect to the recognizer")
-        except requests.RequestException as e:
-            raise OperationFailedError(msg="Recognizer request failed: %s" % e)
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": self._api_key,
+        }
 
-        try:
-            data = resp.json()
-        except ValueError:
+        # Retry on rate-limit / transient network errors.
+        backoff = 1.0
+        last_exc = None
+        resp = None
+        data = None
+        for attempt in range(3):
+            try:
+                resp = self._session.post(url, headers=headers, json=payload, timeout=self._timeout)
+            except (requests.Timeout, requests.ConnectionError) as e:
+                last_exc = e
+                if attempt < 2:
+                    time.sleep(backoff)
+                    backoff = min(8.0, backoff * 2)
+                    continue
+                if isinstance(e, requests.Timeout):
+                    raise OperationTimeoutError(msg="Recognizer connection time out")
+                raise OperationFailedError(msg="Unable to connect to the recognizer")
+            except requests.RequestException as e:
+                raise OperationFailedError(msg="Recognizer request failed: %s" % e)
+
+            try:
+                data = resp.json()
+            except ValueError:
+                data = None
+
+            if resp.status_code in (429, 500, 503):
+                # Respect Retry-After when present; otherwise exponential backoff.
+                if attempt < 2:
+                    ra = resp.headers.get("Retry-After")
+                    try:
+                        sleep_s = float(ra) if ra else backoff
+                    except Exception:
+                        sleep_s = backoff
+                    time.sleep(sleep_s)
+                    backoff = min(8.0, backoff * 2)
+                    continue
+            break
+
+        if resp is None:
+            # Shouldn't happen, but keep error messages consistent.
+            raise OperationFailedError(msg="Unable to connect to the recognizer")
+
+        if data is None:
             raise RecognizerError(msg="Recognizer ERROR: Invalid JSON response")
 
         if resp.status_code != 200:
@@ -148,9 +199,18 @@ class GeminiVLMRecognizer(CaptchaRecognizer):
         except Exception:
             pass
 
+        if not code_src:
+            code_src = _extract_code_candidate(text, self._min_len, self._max_len)
+
         code = _normalize_code(code_src)
         if not code:
             raise RecognizerError(msg="Recognizer ERROR: Empty result")
         if len(code) < self._min_len or len(code) > self._max_len:
-            raise RecognizerError(msg="Recognizer ERROR: Unexpected code length: %r" % code)
+            # As a last resort, try to extract from the full model text (helps when it adds wrappers like "JSON:").
+            fallback = _extract_code_candidate(text, self._min_len, self._max_len)
+            fallback = _normalize_code(fallback)
+            if fallback and self._min_len <= len(fallback) <= self._max_len:
+                code = fallback
+            else:
+                raise RecognizerError(msg="Recognizer ERROR: Unexpected code length: %r" % code)
         return Captcha(code, None, None, None, None)

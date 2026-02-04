@@ -19,6 +19,9 @@ python3 scripts/benchmark_captcha_recognizers.py \
   --images-dir cache/captcha_synth --providers qwen3-vl-flash,qwen3-vl-flash-2026-01-22,qwen3-vl-plus,qwen3-vl-plus-2025-12-19,qwen-vl-max,qwen-vl-plus,qwen2.5-vl-32b-instruct,qwen2.5-vl-7b-instruct --max 40 --sleep 0.05
 
 python3 scripts/benchmark_captcha_recognizers.py \
+  --images-dir cache/captcha_synth --providers qwen-vl-ocr-2025-11-20,baidu --max 40 --sleep 0.05
+
+python3 scripts/benchmark_captcha_recognizers.py \
   --images-dir cache/captcha_synth --providers baidu --max 40 --sleep 0.05
 ```
 
@@ -64,6 +67,11 @@ python3 scripts/benchmark_captcha_recognizers.py \
 - latency (s): avg 0.516, median 0.510, p90 0.589, min 0.432, max 0.649
 - accuracy: exact 0.400, char 0.561 (labeled=40)
 
+### Provider: `qwen-vl-ocr-2025-11-20`
+- ok: 40, fail: 0
+- latency (s): avg 0.607, median 0.494, p90 0.900, min 0.405, max 2.918
+- accuracy: exact 0.600, char 0.775 (labeled=40)
+
 ### Provider: `baidu`
 Notes:
 - This measures the repo's `baidu` recognizer as implemented in `autoelective/captcha/online.py` (currently `accurate_basic`).
@@ -83,6 +91,7 @@ Notes:
 ## Analysis
 - Best exact accuracy on this synthetic set: `qwen3-vl-plus` (0.725). It is slower than `qwen3-vl-flash` but still much faster than `gemini`.
 - Best latency among Qwen models: `qwen-vl-plus` (~0.48s median) but with noticeably lower accuracy.
+- `qwen-vl-ocr-2025-11-20` is faster than most Qwen-VL models but less accurate than `qwen3-vl-flash`/`qwen3-vl-plus`.
 - `qwen3-vl-flash` is the best overall tradeoff for speed + accuracy.
 - `baidu` remains the fastest overall but with the lowest accuracy of the set.
 - `gemini` is the most accurate among non-Qwen in previous run, but much slower with high tail latency (p90 ~7s). It fits better as a fallback than as the primary recognizer.

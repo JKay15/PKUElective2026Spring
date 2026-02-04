@@ -292,6 +292,47 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         return max(1, v)
 
     @property
+    def dashscope_api_key(self):
+        return self.get_optional("captcha", "dashscope_api_key")
+
+    @property
+    def dashscope_base_url(self):
+        return self.get_optional("captcha", "dashscope_base_url")
+
+    @property
+    def dashscope_timeout(self):
+        v = self.get_optional("captcha", "dashscope_timeout")
+        if v is None or v == "":
+            return 10.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid dashscope_timeout: %r" % v)
+
+    @property
+    def dashscope_max_output_tokens(self):
+        v = self.get_optional("captcha", "dashscope_max_output_tokens")
+        if v is None or v == "":
+            return 16
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid dashscope_max_output_tokens: %r" % v)
+        return max(1, v)
+
+    @property
+    def dashscope_model(self):
+        return self.get_optional("captcha", "dashscope_model")
+
+    @property
+    def dashscope_model_flash(self):
+        return self.get_optional("captcha", "dashscope_model_flash")
+
+    @property
+    def dashscope_model_plus(self):
+        return self.get_optional("captcha", "dashscope_model_plus")
+
+    @property
     def captcha_degrade_failures(self):
         v = self.get_optional("captcha", "degrade_failures")
         if v is None or v == "":

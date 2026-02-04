@@ -333,6 +333,10 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         return self.get_optional("captcha", "dashscope_model_plus")
 
     @property
+    def dashscope_model_ocr(self):
+        return self.get_optional("captcha", "dashscope_model_ocr")
+
+    @property
     def captcha_degrade_failures(self):
         v = self.get_optional("captcha", "degrade_failures")
         if v is None or v == "":

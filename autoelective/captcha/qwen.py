@@ -269,3 +269,15 @@ Qwen25Vl7bInstructRecognizer = _make_recognizer(
     "Qwen25Vl7bInstructRecognizer",
     "qwen2.5-vl-7b-instruct",
 )
+
+# Qwen OCR (Model Studio)
+QwenVlOcrRecognizer = _make_recognizer(
+    "QwenVlOcrRecognizer",
+    "qwen-vl-ocr",
+    override_key="dashscope_model_ocr",
+)
+QwenVlOcr20251120Recognizer = _make_recognizer(
+    "QwenVlOcr20251120Recognizer",
+    "qwen-vl-ocr-2025-11-20",
+    override_key="dashscope_model_ocr",
+)

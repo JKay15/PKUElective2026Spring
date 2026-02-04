@@ -73,6 +73,7 @@ def _extract_code_candidate(text, min_len, max_len):
 class _QwenVLBase(CaptchaRecognizer):
     name = None
     default_model = None
+    config_model_override = None
 
     def __init__(self):
         cfg = AutoElectiveConfig()
@@ -93,10 +94,9 @@ class _QwenVLBase(CaptchaRecognizer):
 
         # Model selection: per-provider override first, then generic, then default.
         model_override = cfg.dashscope_model
-        if self.name == "qwen3_vl_flash":
-            model_override = cfg.dashscope_model_flash or model_override
-        elif self.name == "qwen3_vl_plus":
-            model_override = cfg.dashscope_model_plus or model_override
+        override_key = getattr(self, "config_model_override", None)
+        if override_key:
+            model_override = getattr(cfg, override_key) or model_override
         self._model = (model_override or self.default_model).strip()
 
     def recognize(self, raw):
@@ -213,14 +213,59 @@ class _QwenVLBase(CaptchaRecognizer):
         return Captcha(code, None, None, None, None)
 
 
-@register_recognizer
-class Qwen3VlFlashRecognizer(_QwenVLBase):
-    name = "qwen3_vl_flash"
-    default_model = "qwen3-vl-flash"
+def _alias_names(name):
+    aliases = []
+    alias = name.replace("-", "_").replace(".", "_")
+    if alias != name:
+        aliases.append(alias)
+    return aliases
 
 
-@register_recognizer
-class Qwen3VlPlusRecognizer(_QwenVLBase):
-    name = "qwen3_vl_plus"
-    default_model = "qwen3-vl-plus"
+def _make_recognizer(class_name, model_name, override_key=None):
+    attrs = {
+        "name": model_name,
+        "default_model": model_name,
+        "config_model_override": override_key,
+        "aliases": _alias_names(model_name),
+    }
+    cls = type(class_name, (_QwenVLBase,), attrs)
+    return register_recognizer(cls)
 
+
+# Stable flash/plus (allow config overrides)
+Qwen3VlFlashRecognizer = _make_recognizer(
+    "Qwen3VlFlashRecognizer",
+    "qwen3-vl-flash",
+    override_key="dashscope_model_flash",
+)
+Qwen3VlPlusRecognizer = _make_recognizer(
+    "Qwen3VlPlusRecognizer",
+    "qwen3-vl-plus",
+    override_key="dashscope_model_plus",
+)
+
+# Snapshot and other variants
+Qwen3VlFlash20260122Recognizer = _make_recognizer(
+    "Qwen3VlFlash20260122Recognizer",
+    "qwen3-vl-flash-2026-01-22",
+)
+Qwen3VlPlus20251219Recognizer = _make_recognizer(
+    "Qwen3VlPlus20251219Recognizer",
+    "qwen3-vl-plus-2025-12-19",
+)
+QwenVlMaxRecognizer = _make_recognizer(
+    "QwenVlMaxRecognizer",
+    "qwen-vl-max",
+)
+QwenVlPlusRecognizer = _make_recognizer(
+    "QwenVlPlusRecognizer",
+    "qwen-vl-plus",
+)
+Qwen25Vl32bInstructRecognizer = _make_recognizer(
+    "Qwen25Vl32bInstructRecognizer",
+    "qwen2.5-vl-32b-instruct",
+)
+Qwen25Vl7bInstructRecognizer = _make_recognizer(
+    "Qwen25Vl7bInstructRecognizer",
+    "qwen2.5-vl-7b-instruct",
+)

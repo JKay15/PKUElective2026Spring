@@ -22,6 +22,13 @@ def register_recognizer(cls):
     if not name:
         raise ValueError("Recognizer must define a non-empty 'name'")
     _REGISTRY[name] = cls
+    aliases = getattr(cls, "aliases", None)
+    if aliases:
+        for alias in aliases:
+            alias = (alias or "").strip()
+            if not alias:
+                continue
+            _REGISTRY[alias] = cls
     return cls
 
 

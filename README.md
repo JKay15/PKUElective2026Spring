@@ -59,7 +59,7 @@ minimum_interval = -1 (最小消息时间间隔，单位为秒，若消息产生
 
 ### apikey.json
 
-**请首先将 apikey.sample.ini 复制一份并改名为 apikey.ini，并按照以下说明进行配置。**
+**请首先将 apikey.sample.ini 复制一份并改名为 apikey.ini，并按照以下说明进行配置。请不要提交包含真实密钥的文件。**
 
 该文件为 [TT 识图](http://www.ttshitu.com) 平台的 API 密钥，在平台注册后，填入用户名与密码即可。由于该 API 需要收费，须在平台充值后方可使用（1 RMB 足够用到天荒地老了）。
 

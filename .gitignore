@@ -235,5 +235,5 @@ cython_debug/
 
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm
 
-*.ini
+config.ini
 apikey.json

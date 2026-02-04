@@ -51,6 +51,8 @@ minimum_interval = -1 (最小消息时间间隔，单位为秒，若消息产生
 
 ### config.ini
 
+首次使用请先复制 `config.sample.ini` 为 `config.ini`。
+
 参考 [PKUAutoElective](https://github.com/zhongxinghong/PKUAutoElective) 项目中的 `config.ini` 配置说明。
 
 你也可以使用我写的 [可视化配置文件生成器](https://docs.arthals.ink/docs/pku-auto-elective)

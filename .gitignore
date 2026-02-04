@@ -1,5 +1,10 @@
 .idea/
 .vs/
+.DS_Store
+
+# local logs/cache
+log/
+cache/
 
 # CMake
 cmake-build-*/

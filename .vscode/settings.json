@@ -1,0 +1,325 @@
+{
+  "editor.fontSize": 16,
+  "window.zoomLevel": -1,
+  "explorer.confirmDelete": false,
+  "terminal.integrated.fontSize": 16,
+  "terminal.integrated.cursorStyle": "line",
+  "files.autoSave": "onFocusChange",
+  "debug.onTaskErrors": "abort",
+  "code-runner.runInTerminal": true,
+  "cmake.configureOnOpen": true,
+  "terminal.integrated.inheritEnv": false,
+  "terminal.integrated.shell.osx": "zsh",
+  "terminal.integrated.defaultProfile.osx": "zsh",
+  // 添加希望被忽略的文件,这样一些文件虽然存在于当前工作目录下,但是不会被显示在左侧的文件浏览器里
+  "files.exclude": {
+    // dSYM文件具有调试信息,普通使用的话不看到它就可以了
+    "**/*.dSYM": true,
+    "**/*.out": true,
+  },
+  // --------------------------------------------------------------------------------------
+  // Code Runner
+  // To run code:
+  //   use shortcut "Ctrl Opt N" *
+  //   or press F1 and then select/type Run Code,
+  //   or right click the Text Editor and then click Run Code in editor context menu
+  //   or click Run Code button in editor title menu
+  //   or click Run Code button in context menu of file explorer
+  // To stop the running code:
+  //   use shortcut "Ctrl Opt M" *
+  //   or press F1 and then select/type Stop Code Run
+  //   or right click the Output Channel and then click Stop Code Run in context menu
+  "code-runner.executorMap": {
+    // Introduction:
+    //   Make sure the executor PATH of each language is set in the environment variable.
+    //   You could also add entry into "code-runner.executorMap" to set the executor PATH.
+    // Supported customized parameters:
+    //   $workspaceRoot: The path of the folder opened in VS Code
+    //   $dir: The directory of the code file being run
+    //   $fullFileName: The full name of the code file being run
+    //   $fileName: The base name of the code file being run, that is the file without the directory
+    //   $fileNameWithoutExt: The base name of the code file being run without its extension
+    /* ------ 编译、运行只有一个文件的cpp文件 ------ */
+    // 注：路径中有空格不会出现问题
+    "cpp": "g++ $fullFileName -o $dir\"$fileNameWithoutExt\"\".out\" -W -Wall -O2 -std=c++17 && $dir\"$fileNameWithoutExt\"\".out\"",
+    // 其中 $fullFileName 是绝对路径，是主文件
+    // 自己决定是否加入 && rm $dir\"$fileNameWithoutExt\"\".out\"（也可以添加"files.exclude"）
+    /* ------ 编译、运行多个cpp文件 ------ */
+    // "cpp": "g++ $fullFileName <file_to_link> -o $dir\"$fileNameWithoutExt\"\".out\" -W -Wall -O2 -std=c++17 && $dir\"$fileNameWithoutExt\"\".out\"",
+    // <file_to_link>的写法：
+    //   一般的，你也可以直接写绝对路径
+    //     \"/path/xxxx.cpp\"
+    //   如果你链接的cpp文件和主文件在一个目录下：
+    //     $dir\"xxxx.cpp\"
+    //   更一般的，如果你链接的cpp文件不和主文件在一个目录下，需要从当前VSCode的工作目录补充相对路径从而形成绝对路径：
+    //     $workspaceRoot\"relative/path/xxxx.cpp\"
+    /* ------ 编译c文件 ------ */
+    "c": "gcc $fullFileName -o $dir\"$fileNameWithoutExt\"\".out\" -W -Wall -O2 -std=c17 && $dir\"$fileNameWithoutExt\"\".out\"",
+    // "c": "gcc $fullFileName <file_to_link> -o $dir\"$fileNameWithoutExt\"\".out\" -W -Wall -O2 -std=c17 && $dir\"$fileNameWithoutExt\"\".out\"",
+    "python.defaultInterpreterPath": "/usr/bin/python3",
+    // "python": "python3 -u $fullFileName",
+    "python": "python -u $fullFileName",
+    // "python": "/usr/bin/python3 -u $fullFileName"
+    "python.venvPath": "~/.virtualenvs",
+
+  },
+  // Whether to clear previous output before each run (default is false):
+  "code-runner.clearPreviousOutput": false,
+  // Whether to save all files before running (default is false):
+  "code-runner.saveAllFilesBeforeRun": false,
+  // Whether to save the current file before running (default is false):
+  "code-runner.saveFileBeforeRun": true,
+  // Whether to show extra execution message like [Running] ... and [Done] ... (default is true):
+  "code-runner.showExecutionMessage": true, // cannot see that message is you set "code-runner.runInTerminal" to true
+  // Whether to run code in Integrated Terminal (only support to run whole file in Integrated Terminal, neither untitled file nor code snippet) (default is false):
+  // "code-runner.runInTerminal": true, // cannot input data when setting to false (前面有一样的设置，所以这里给注释了)
+  // Whether to preserve focus on code editor after code run is triggered (default is true, the code editor will keep focus; when it is false, Terminal or Output Channel will take focus):
+  "code-runner.preserveFocus": false,
+  // Whether to ignore selection to always run entire file. (Default is false)
+  "code-runner.ignoreSelection": true,
+  "files.associations": {
+    "iostream": "cpp",
+    "algorithm": "cpp",
+    "iomanip": "cpp",
+    "stack": "cpp",
+    "string": "cpp",
+    "chrono": "cpp",
+    "limits": "cpp",
+    "__functional_03": "cpp",
+    "functional": "cpp",
+    "iosfwd": "cpp",
+    "ctime": "cpp",
+    "cstdlib": "cpp",
+    "random": "cpp",
+    "cmath": "cpp",
+    "unordered_map": "cpp",
+    "istream": "cpp",
+    "complex": "cpp",
+    "vector": "cpp",
+    "string_view": "cpp",
+    "__locale": "cpp",
+    "__string": "cpp",
+    "regex": "cpp",
+    "ostream": "cpp",
+    "fstream": "cpp",
+    "__bit_reference": "cpp",
+    "__bits": "cpp",
+    "__config": "cpp",
+    "__debug": "cpp",
+    "__errc": "cpp",
+    "__functional_base": "cpp",
+    "__hash_table": "cpp",
+    "__mutex_base": "cpp",
+    "__node_handle": "cpp",
+    "__nullptr": "cpp",
+    "__split_buffer": "cpp",
+    "__threading_support": "cpp",
+    "__tree": "cpp",
+    "__tuple": "cpp",
+    "array": "cpp",
+    "atomic": "cpp",
+    "bit": "cpp",
+    "bitset": "cpp",
+    "cctype": "cpp",
+    "cfenv": "cpp",
+    "cinttypes": "cpp",
+    "clocale": "cpp",
+    "condition_variable": "cpp",
+    "csetjmp": "cpp",
+    "csignal": "cpp",
+    "cstdarg": "cpp",
+    "cstddef": "cpp",
+    "cstdint": "cpp",
+    "cstdio": "cpp",
+    "cstring": "cpp",
+    "cwchar": "cpp",
+    "cwctype": "cpp",
+    "deque": "cpp",
+    "exception": "cpp",
+    "forward_list": "cpp",
+    "future": "cpp",
+    "initializer_list": "cpp",
+    "ios": "cpp",
+    "iterator": "cpp",
+    "list": "cpp",
+    "locale": "cpp",
+    "map": "cpp",
+    "memory": "cpp",
+    "mutex": "cpp",
+    "new": "cpp",
+    "numeric": "cpp",
+    "optional": "cpp",
+    "queue": "cpp",
+    "ratio": "cpp",
+    "scoped_allocator": "cpp",
+    "set": "cpp",
+    "sstream": "cpp",
+    "stdexcept": "cpp",
+    "streambuf": "cpp",
+    "system_error": "cpp",
+    "thread": "cpp",
+    "tuple": "cpp",
+    "type_traits": "cpp",
+    "typeindex": "cpp",
+    "typeinfo": "cpp",
+    "unordered_set": "cpp",
+    "utility": "cpp",
+    "valarray": "cpp",
+    "filesystem": "cpp",
+    "compare": "cpp",
+    "concepts": "cpp",
+    "variant": "cpp",
+    "__verbose_abort": "cpp",
+    "span": "cpp",
+    "any": "cpp",
+    "barrier": "cpp",
+    "charconv": "cpp",
+    "codecvt": "cpp",
+    "cuchar": "cpp",
+    "coroutine": "cpp",
+    "latch": "cpp",
+    "numbers": "cpp",
+    "semaphore": "cpp",
+    "shared_mutex": "cpp",
+    "ranges": "cpp",
+    "__memory": "cpp"
+  },
+  // --------------------------------------------------------------------------------------
+  "js/ts.implicitProjectConfig.checkJs": true,
+  "latex-workshop.latex.tools": [
+    {
+      "name": "xelatex",
+      "command": "xelatex",
+      "args": [
+        "-synctex=1",
+        "-interaction=nonstopmode",
+        "-file-line-error",
+        "%DOC%"
+      ]
+    },
+    {
+      "name": "pdflatex",
+      "command": "pdflatex",
+      "args": [
+        "-synctex=1",
+        "-interaction=nonstopmode",
+        "-file-line-error",
+        "%DOC%"
+      ]
+    },
+    {
+      "name": "latexmk",
+      "command": "latexmk",
+      // "args": [
+      //     "-synctex=1",
+      //     "-interaction=nonstopmode",
+      //     "-file-line-error",
+      //     "-pdf",
+      //     "-outdir=%OUTDIR%",
+      //     "%DOC%"
+      // ],
+      "args": [
+        "-xelatex",
+        "-synctex=1",
+        "-interaction=nonstopmode",
+        "-file-line-error",
+        "%DOC%"
+      ],
+      "env": {}
+    },
+    /*
+            {
+              "name": "latexmk",
+              "command": "latexmk",
+              "args": [
+                "-synctex=1",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "-pdf",
+                "%DOC%"
+              ]
+            },
+            */
+    {
+      "name": "bibtex",
+      "command": "bibtex",
+      "args": [
+        "%DOCFILE%"
+      ]
+    }
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "XeLaTeX",
+      "tools": [
+        "xelatex",
+        "xelatex"
+      ]
+    },
+    {
+      "name": "PDFLaTeX",
+      "tools": [
+        "pdflatex"
+      ]
+    },
+    {
+      "name": "latexmk",
+      "tools": [
+        "latexmk"
+      ]
+    },
+    {
+      "name": "BibTeX",
+      "tools": [
+        "bibtex"
+      ]
+    },
+    {
+      "name": "xelatex -> bibtex -> xelatex*2",
+      "tools": [
+        "xelatex",
+        "bibtex",
+        "xelatex",
+        "xelatex"
+      ]
+    },
+    {
+      "name": "pdflatex -> bibtex -> pdflatex*2",
+      "tools": [
+        "pdflatex",
+        "bibtex",
+        "pdflatex",
+        "pdflatex"
+      ]
+    },
+  ],
+  "latex-workshop.latex.autoClean.run": "onBuilt", //注意结尾是 t 不是 d
+  "latex-workshop.latex.clean.fileTypes": [
+    "*.aux",
+    "*.bbl",
+    "*.blg",
+    "*.idx",
+    "*.ind",
+    "*.lof",
+    "*.lot",
+    "*.out",
+    "*.toc",
+    "*.acn",
+    "*.acr",
+    "*.alg",
+    "*.glg",
+    "*.glo",
+    "*.gls",
+    "*.ist",
+    "*.fls",
+    "*.log",
+    "*.fdb_latexmk",
+  ],
+  "cmake.sourceDirectory": "${workspaceFolder}/.vscode/jsoncpp/include",
+  "python.formatting.provider": "yapf",
+  "remote.SSH.remotePlatform": {
+    "110.42.53.83":"windows",
+    "*":"linux"
+  }
+  // --------------------------------------------------------------------------------------
+}

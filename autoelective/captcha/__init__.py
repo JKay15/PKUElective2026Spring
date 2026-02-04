@@ -4,4 +4,13 @@
 # modified: 2019-09-08
 
 from .captcha import Captcha
-from .online import TTShituRecognizer
+from .registry import CaptchaRecognizer, get_recognizer
+from .online import TTShituRecognizer, BaiduOCRRecognizer
+
+__all__ = [
+    "Captcha",
+    "CaptchaRecognizer",
+    "get_recognizer",
+    "TTShituRecognizer",
+    "BaiduOCRRecognizer",
+]

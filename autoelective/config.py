@@ -43,6 +43,27 @@ class BaseConfig(object):
     def getboolean(self, section, key):
         return self._config.getboolean(section, key)
 
+    def get_optional(self, section, key, default=None):
+        if self._config.has_option(section, key):
+            return self._config.get(section, key)
+        return default
+
+    def get_optional_bool(self, section, key, default=False):
+        if not self._config.has_option(section, key):
+            return default
+        try:
+            return self._config.getboolean(section, key)
+        except ValueError:
+            raise UserInputException("Invalid boolean for %s.%s" % (section, key))
+
+    def get_optional_list(self, section, key, default=None):
+        if not self._config.has_option(section, key):
+            return default if default is not None else []
+        v = self._config.get(section, key)
+        if v is None or v.strip() == "":
+            return []
+        return _reCommaSep.split(v)
+
     def getdict(self, section, options):
         assert isinstance(options, (list, tuple, set))
         d = dict(self._config.items(section))
@@ -170,6 +191,79 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
     @property
     def minimum_interval(self):
         return self.getfloat("notification", "minimum_interval")
+
+    # [captcha]
+
+    @property
+    def captcha_provider(self):
+        return (self.get_optional("captcha", "provider", "baidu") or "baidu").lower()
+
+    @property
+    def baidu_api_key(self):
+        return self.get_optional("captcha", "baidu_api_key")
+
+    @property
+    def baidu_secret_key(self):
+        return self.get_optional("captcha", "baidu_secret_key")
+
+    @property
+    def baidu_timeout(self):
+        v = self.get_optional("captcha", "baidu_timeout")
+        if v is None or v == "":
+            return 10.0
+        try:
+            return float(v)
+        except ValueError:
+            raise UserInputException("Invalid baidu_timeout: %r" % v)
+
+    @property
+    def captcha_degrade_failures(self):
+        v = self.get_optional("captcha", "degrade_failures")
+        if v is None or v == "":
+            return 12
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid degrade_failures: %r" % v)
+        return max(1, v)
+
+    @property
+    def captcha_degrade_cooldown(self):
+        v = self.get_optional("captcha", "degrade_cooldown")
+        if v is None or v == "":
+            return 60.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid degrade_cooldown: %r" % v)
+        return max(1.0, v)
+
+    @property
+    def captcha_degrade_monitor_only(self):
+        return self.get_optional_bool("captcha", "degrade_monitor_only", True)
+
+    @property
+    def captcha_degrade_notify(self):
+        return self.get_optional_bool("captcha", "degrade_notify", True)
+
+    @property
+    def captcha_degrade_notify_interval(self):
+        v = self.get_optional("captcha", "degrade_notify_interval")
+        if v is None or v == "":
+            return 60.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid degrade_notify_interval: %r" % v)
+        return max(1.0, v)
+
+    @property
+    def captcha_switch_on_degrade(self):
+        return self.get_optional_bool("captcha", "switch_on_degrade", True)
+
+    @property
+    def captcha_fallback_providers(self):
+        return [s.strip().lower() for s in self.get_optional_list("captcha", "fallback_providers")]
 
     # [course]
 

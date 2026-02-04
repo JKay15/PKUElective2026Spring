@@ -251,6 +251,6 @@ class QuotaLimitedError(TipsException):
     desc = "该课程选课人数已满。"
 
 
-class MultiPECourseError(TimeoutError):
+class MultiPECourseError(TipsException):
     code = 332
     desc = "学校规定每学期只能修一门体育课。"

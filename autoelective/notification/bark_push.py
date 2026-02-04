@@ -92,4 +92,5 @@ def test_notify(_token_: str):
     notify.send_bark_push(msg="This is a test.", prefix="[测试]")
 
 
-test_notify("")  # 在单引号内填入您的token
+if __name__ == "__main__":
+    test_notify("")  # 在单引号内填入您的token

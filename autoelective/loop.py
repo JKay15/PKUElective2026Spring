@@ -16,7 +16,7 @@ from .environ import Environ
 from .config import AutoElectiveConfig
 from .logger import ConsoleLogger, FileLogger
 from .course import Course
-from .captcha import TTShituRecognizer, Captcha
+from .captcha import get_recognizer
 from .parser import get_tables, get_courses, get_courses_with_detail, get_sida
 from .hook import _dump_request
 from .iaaa import IAAAClient
@@ -63,9 +63,28 @@ config.check_supply_cancel_page(supply_cancel_page)
 _USER_WEB_LOG_DIR = os.path.join(WEB_LOG_DIR, config.get_user_subpath())
 mkdir(_USER_WEB_LOG_DIR)
 
-# recognizer = CaptchaRecognizer()
-recognizer = TTShituRecognizer()
+# build recognizer chain
+_recognizer_names = []
+_recognizer_seen = set()
+for _name in [config.captcha_provider] + config.captcha_fallback_providers:
+    _name = (_name or "").strip().lower()
+    if not _name or _name in _recognizer_seen:
+        continue
+    _recognizer_seen.add(_name)
+    _recognizer_names.append(_name)
+if not _recognizer_names:
+    _recognizer_names = ["baidu"]
+recognizers = [get_recognizer(n) for n in _recognizer_names]
+recognizer_index = 0
+recognizer = recognizers[0]
 RECOGNIZER_MAX_ATTEMPT = 15
+MIN_REFRESH_INTERVAL = 0.1
+CAPTCHA_DEGRADE_FAILURES = config.captcha_degrade_failures
+CAPTCHA_DEGRADE_COOLDOWN = config.captcha_degrade_cooldown
+CAPTCHA_DEGRADE_MONITOR_ONLY = config.captcha_degrade_monitor_only
+CAPTCHA_DEGRADE_NOTIFY = config.captcha_degrade_notify
+CAPTCHA_DEGRADE_NOTIFY_INTERVAL = config.captcha_degrade_notify_interval
+CAPTCHA_SWITCH_ON_DEGRADE = config.captcha_switch_on_degrade
 
 electivePool = Queue(maxsize=elective_client_pool_size)
 reloginPool = Queue(maxsize=elective_client_pool_size)
@@ -77,6 +96,9 @@ delays = np.zeros(0, dtype=np.int32)  # int [N];
 
 killedElective = ElectiveClient(-1)
 NO_DELAY = -1
+_captcha_failure_count = 0
+_captcha_degrade_until = 0.0
+_last_degrade_notify_at = 0.0
 
 notify.send_bark_push(msg=WECHAT_MSG["s"], prefix=WECHAT_PREFIX[3])
 
@@ -91,9 +113,9 @@ class _ElectiveExpired(Exception):
 
 def _get_refresh_interval():
     if refresh_random_deviation <= 0:
-        return refresh_interval
+        return max(MIN_REFRESH_INTERVAL, refresh_interval)
     delta = (random.random() * 2 - 1) * refresh_random_deviation * refresh_interval
-    return refresh_interval + delta
+    return max(MIN_REFRESH_INTERVAL, refresh_interval + delta)
 
 
 def _ignore_course(course, reason):
@@ -111,6 +133,64 @@ def _format_timestamp(timestamp):
     if timestamp == -1:
         return str(timestamp)
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
+
+def _captcha_is_degraded():
+    return time.time() < _captcha_degrade_until
+
+def _record_captcha_success():
+    global _captcha_failure_count
+    _captcha_failure_count = 0
+
+def _record_captcha_failure():
+    global _captcha_failure_count, _captcha_degrade_until
+    _captcha_failure_count += 1
+    if CAPTCHA_DEGRADE_FAILURES > 0 and _captcha_failure_count >= CAPTCHA_DEGRADE_FAILURES:
+        _captcha_degrade_until = time.time() + CAPTCHA_DEGRADE_COOLDOWN
+        _captcha_failure_count = 0
+        cout.warning(
+            "Captcha recognition degraded for %s s" % int(CAPTCHA_DEGRADE_COOLDOWN)
+        )
+        if CAPTCHA_SWITCH_ON_DEGRADE:
+            _rotate_recognizer("degraded")
+        if CAPTCHA_DEGRADE_NOTIFY:
+            _notify_degraded("Captcha degraded")
+
+def _rotate_recognizer(reason):
+    global recognizer_index, recognizer
+    if len(recognizers) <= 1:
+        return False
+    old = _recognizer_names[recognizer_index]
+    recognizer_index = (recognizer_index + 1) % len(recognizers)
+    recognizer = recognizers[recognizer_index]
+    new = _recognizer_names[recognizer_index]
+    if old == new:
+        return False
+    cout.warning("Rotate recognizer %s -> %s (%s)" % (old, new, reason))
+    return True
+
+def _notify_degraded(title):
+    global _last_degrade_notify_at
+    now = time.time()
+    if now - _last_degrade_notify_at < CAPTCHA_DEGRADE_NOTIFY_INTERVAL:
+        return
+    _last_degrade_notify_at = now
+    try:
+        notify.send_bark_push(msg=title, prefix=WECHAT_PREFIX[3])
+    except Exception:
+        pass
+
+def _notify_degraded_available(tasks):
+    if not CAPTCHA_DEGRADE_NOTIFY:
+        return
+    if not tasks:
+        return
+    items = []
+    for _, c in list(tasks)[:5]:
+        items.append("%s[%s]" % (c.name, c.class_no))
+    courses = ", ".join(items)
+    if len(tasks) > 5:
+        courses = courses + " ..."
+    _notify_degraded("Available (degraded): %s" % courses)
 
 
 def _dump_respose_content(content, filename):
@@ -255,6 +335,7 @@ def run_elective_loop():
 
     ms = config.mutexes
     mutexes.resize((N, N), refcheck=False)
+    mutex_list = [set() for _ in range(N)]
 
     for mid, m in ms.items():
         ixs = []
@@ -267,6 +348,8 @@ def run_elective_loop():
             ixs.append(ix)
         for ix1, ix2 in combinations(ixs, 2):
             mutexes[ix1, ix2] = mutexes[ix2, ix1] = 1
+            mutex_list[ix1].add(ix2)
+            mutex_list[ix2].add(ix1)
 
     ## load delay
 
@@ -427,6 +510,7 @@ def run_elective_loop():
                 try:
                     elected = get_courses(tables[1])
                     plans = get_courses_with_detail(tables[0])
+                    plan_map = {c.to_simplified(): c for c in plans}
                 except IndexError as e:
                     filename = "elective.get_SupplyCancel_%d.html" % int(
                         time.time() * 1000
@@ -465,6 +549,7 @@ def run_elective_loop():
                     try:
                         elected = get_courses(tables[1])
                         plans = get_courses_with_detail(tables[0])
+                        plan_map = {c.to_simplified(): c for c in plans}
                     except IndexError as e:
                         cout.warning("IndexError encountered")
                         cout.info(
@@ -489,31 +574,29 @@ def run_elective_loop():
                 elif c in elected:
                     cout.info("%s is elected, ignored" % c)
                     _ignore_course(c, "Elected")
-                    for (mix,) in np.argwhere(mutexes[ix, :] == 1):
+                    for mix in mutex_list[ix]:
                         mc = goals[mix]
                         if mc in ignored:
                             continue
                         cout.info("%s is simultaneously ignored by mutex rules" % mc)
                         _ignore_course(mc, "Mutex rules")
                 else:
-                    for c0 in plans:  # c0 has detail
-                        if c0 == c:
-                            if c0.is_available():
-                                delay = delays[ix]
-                                if delay != NO_DELAY and c0.remaining_quota > delay:
-                                    cout.info(
-                                        "%s hasn't reached the delay threshold %d, skip"
-                                        % (c0, delay)
-                                    )
-                                else:
-                                    tasks.append((ix, c0))
-                                    cout.info("%s is AVAILABLE now !" % c0)
-                            break
-                    else:
+                    c0 = plan_map.get(c)
+                    if c0 is None:
                         raise UserInputException(
                             "%s is not in your course plan, please check your config."
                             % c
                         )
+                    if c0.is_available():
+                        delay = delays[ix]
+                        if delay != NO_DELAY and c0.remaining_quota > delay:
+                            cout.info(
+                                "%s hasn't reached the delay threshold %d, skip"
+                                % (c0, delay)
+                            )
+                        else:
+                            tasks.append((ix, c0))
+                            cout.info("%s is AVAILABLE now !" % c0)
 
             tasks = deque(
                 [(ix, c) for ix, c in tasks if c not in ignored]
@@ -525,6 +608,11 @@ def run_elective_loop():
                 cout.info("No course available")
                 continue
 
+            if _captcha_is_degraded() and CAPTCHA_DEGRADE_MONITOR_ONLY:
+                cout.warning("Captcha degraded, monitor-only this round")
+                _notify_degraded_available(tasks)
+                continue
+
             elected = []  # cache elected courses dynamically from `get_ElectSupplement`
 
             while len(tasks) > 0:
@@ -533,7 +621,7 @@ def run_elective_loop():
                 is_mutex = False
 
                 # dynamically filter course by mutex rules
-                for (mix,) in np.argwhere(mutexes[ix, :] == 1):
+                for mix in mutex_list[ix]:
                     mc = goals[mix]
                     if mc in elected:  # ignore course in advanced
                         is_mutex = True
@@ -547,12 +635,31 @@ def run_elective_loop():
 
                 cout.info("Try to elect %s" % course)
 
+                if _captcha_is_degraded() and CAPTCHA_DEGRADE_MONITOR_ONLY:
+                    left = int(_captcha_degrade_until - time.time())
+                    cout.warning(
+                        "Captcha degraded, skip electing for %s s (course: %s)"
+                        % (max(left, 0), course)
+                    )
+                    _notify_degraded_available([(ix, course)])
+                    break
+
                 ## validate captcha first
 
-                while True:
+                validated = False
+                for _ in range(RECOGNIZER_MAX_ATTEMPT):
                     cout.info("Fetch a captcha")
                     r = elective.get_DrawServlet()
-                    captcha = recognizer.recognize(r.content)
+                    try:
+                        captcha = recognizer.recognize(r.content)
+                    except (RecognizerError, OperationTimeoutError, OperationFailedError) as e:
+                        ferr.error(e)
+                        _add_error(e)
+                        _record_captcha_failure()
+                        if _captcha_is_degraded():
+                            break
+                        cout.info("Captcha recognize failed, try again")
+                        continue
                     cout.info("Recognition result: %s" % captcha.code)
 
                     r = elective.get_Validate(username, captcha.code)
@@ -560,18 +667,33 @@ def run_elective_loop():
                         res = r.json()["valid"]  # 可能会返回一个错误网页
                     except Exception as e:
                         ferr.error(e)
-                        raise OperationFailedError(msg="Unable to validate captcha")
+                        _record_captcha_failure()
+                        if _captcha_is_degraded():
+                            break
+                        cout.info("Captcha validate parse failed, try again")
+                        continue
 
                     if res == "2":
                         cout.info("Validation passed")
+                        _record_captcha_success()
+                        validated = True
                         break
                     elif res == "0":
                         cout.info("Validation failed")
                         # notify.send_bark_push(msg=WECHAT_MSG[2], prefix=WECHAT_PREFIX[2])
                         cout.info("Auto error caching skipped for good")
                         cout.info("Try again")
+                        _record_captcha_failure()
+                        if _captcha_is_degraded():
+                            break
                     else:
                         cout.warning("Unknown validation result: %s" % res)
+                if not validated:
+                    cout.warning(
+                        "Validation failed after %d attempts, skip %s for now"
+                        % (RECOGNIZER_MAX_ATTEMPT, course)
+                    )
+                    continue
 
                 ## try to elect
 

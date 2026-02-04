@@ -1,12 +1,15 @@
 import base64
 from io import BytesIO
 import json
+import os
+import time
 import requests
 from PIL import Image
 import urllib
 from .captcha import Captcha
-from ..config import BaseConfig
+from .registry import CaptchaRecognizer, register_recognizer
 from .._internal import get_abs_path
+from ..config import AutoElectiveConfig
 from ..exceptions import OperationFailedError, OperationTimeoutError, RecognizerError
 
 class APIConfig(object):
@@ -35,17 +38,37 @@ class APIConfig(object):
     def typeid(self):
         return int(self._apikey['RecognitionTypeid'])
 
-API_KEY = "PRhT07TN75zOBWK06VlWx0Yh"
-SECRET_KEY = "frHeo730hR0BsfvLCpeVqmRKXFrQcA2o"
-
-def get_access_token():
-        """
-        使用 AK，SK 生成鉴权签名（Access Token）
-        :return: access_token，或是None(如果错误)
-        """
-        url = "https://aip.baidubce.com/oauth/2.0/token"
-        params = {"grant_type": "client_credentials", "client_id": API_KEY, "client_secret": SECRET_KEY}
-        return str(requests.post(url, params=params).json().get("access_token"))
+def get_access_token(api_key, secret_key, timeout, session=None):
+    """
+    使用 AK，SK 生成鉴权签名（Access Token）
+    :return: access_token，或是None(如果错误)
+    """
+    if not api_key or not secret_key:
+        raise RecognizerError(
+            msg="Baidu OCR keys not configured. Set [captcha] baidu_api_key/baidu_secret_key "
+                "or environment variables BAIDU_OCR_API_KEY/BAIDU_OCR_SECRET_KEY."
+        )
+    url = "https://aip.baidubce.com/oauth/2.0/token"
+    params = {"grant_type": "client_credentials", "client_id": api_key, "client_secret": secret_key}
+    sess = session or requests
+    try:
+        resp = sess.post(url, params=params, timeout=timeout)
+    except requests.Timeout:
+        raise OperationTimeoutError(msg="Recognizer connection time out")
+    except requests.ConnectionError:
+        raise OperationFailedError(msg="Unable to connect to the recognizer")
+    except requests.RequestException as e:
+        raise OperationFailedError(msg="Recognizer request failed: %s" % e)
+    try:
+        data = resp.json()
+    except ValueError:
+        raise RecognizerError(msg="Recognizer ERROR: Invalid JSON response")
+    token = data.get("access_token")
+    if not token:
+        msg = data.get("error_msg") or "Unable to obtain access token"
+        raise RecognizerError(msg="Recognizer ERROR: %s" % msg)
+    expires_in = data.get("expires_in")
+    return token, expires_in
 
 
 def get_file_content_as_base64(path, urlencoded=False):
@@ -61,26 +84,78 @@ def get_file_content_as_base64(path, urlencoded=False):
             content = urllib.parse.quote_plus(content)
     return content 
 
-class TTShituRecognizer(object):
+@register_recognizer
+class BaiduOCRRecognizer(CaptchaRecognizer):
+    name = "baidu"
 
     # _RECOGNIZER_URL = "http://api.ttshitu.com/base64"
     
 
     def __init__(self):
         # self._config = APIConfig()
-        self.url= "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic?access_token=" + get_access_token()
+        config = AutoElectiveConfig()
+        self._api_key = config.baidu_api_key or os.getenv("BAIDU_OCR_API_KEY")
+        self._secret_key = config.baidu_secret_key or os.getenv("BAIDU_OCR_SECRET_KEY")
+        self._timeout = config.baidu_timeout
+        self._session = requests.Session()
+        self._access_token = None
+        self._access_token_expire_at = 0
+        self._refresh_token()
+        self.url = (
+            "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic?access_token="
+            + self._access_token
+        )
+
+    def _refresh_token(self):
+        token, expires_in = get_access_token(
+            self._api_key,
+            self._secret_key,
+            self._timeout,
+            session=self._session,
+        )
+        self._access_token = token
+        try:
+            expires_in = int(expires_in)
+        except Exception:
+            expires_in = 0
+        if expires_in > 60:
+            self._access_token_expire_at = time.time() + expires_in - 60
+        else:
+            self._access_token_expire_at = time.time() + 3600
+
+    def _ensure_token(self):
+        if not self._access_token or time.time() >= self._access_token_expire_at:
+            self._refresh_token()
+            self.url = (
+                "https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic?access_token="
+                + self._access_token
+            )
         
     def recognize(self, raw):
+        self._ensure_token()
         
         # image=get_file_content_as_base64(BytesIO(raw),1)
-        image=TTShituRecognizer._to_b64(raw)
+        image=self._to_b64(raw)
         image=urllib.parse.quote_plus(image)
         payload='image='+image+"&detect_direction=true&paragraph=false&probability=false&multidirectional_recognize=true"
         headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json'
         }
-        response = requests.request("POST", self.url, headers=headers, data=payload.encode("utf-8"))
+        try:
+            response = requests.request(
+                "POST",
+                self.url,
+                headers=headers,
+                data=payload.encode("utf-8"),
+                timeout=self._timeout,
+            )
+        except requests.Timeout:
+            raise OperationTimeoutError(msg="Recognizer connection time out")
+        except requests.ConnectionError:
+            raise OperationFailedError(msg="Unable to connect to the recognizer")
+        except requests.RequestException as e:
+            raise OperationFailedError(msg="Recognizer request failed: %s" % e)
         # _typeid_ = self._config.typeid
         # encode = TTShituRecognizer._to_b64(raw)
         # data = {
@@ -90,12 +165,10 @@ class TTShituRecognizer(object):
         #     "typeid": _typeid_
         # }
         try:
-            result=json.loads(response.text)
+            result = response.json()
             # result = json.loads(requests.post(TTShituRecognizer._RECOGNIZER_URL, json=data, timeout=20).text)
-        except requests.Timeout:
-            raise OperationTimeoutError(msg="Recognizer connection time out")
-        except requests.ConnectionError:
-            raise OperationFailedError(msg="Unable to coonnect to the recognizer")
+        except ValueError:
+            raise RecognizerError(msg="Recognizer ERROR: Invalid JSON response")
         
         if 'error_code' not in result.keys():
             # 防止index error
@@ -109,6 +182,8 @@ class TTShituRecognizer(object):
         # else: # fail
         #     raise RecognizerError(msg="Recognizer ERROR: %s" % result["message"])
     
+    @staticmethod
+    @staticmethod
     def _to_b64(raw):
         im = Image.open(BytesIO(raw))
         try:
@@ -123,3 +198,7 @@ class TTShituRecognizer(object):
         im.convert('RGB').save(buffer, format='JPEG')
         b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         return b64
+
+
+# Backward-compatible alias
+TTShituRecognizer = BaiduOCRRecognizer

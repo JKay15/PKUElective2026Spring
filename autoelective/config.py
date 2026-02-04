@@ -218,6 +218,7 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
 
     @property
     def captcha_code_length(self):
+        # Legacy: fixed captcha length.
         v = self.get_optional("captcha", "code_length")
         if v is None or v == "":
             return 4
@@ -226,6 +227,40 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         except ValueError:
             raise UserInputException("Invalid code_length: %r" % v)
         return max(1, v)
+
+    @property
+    def captcha_code_length_min(self):
+        v_min = self.get_optional("captcha", "code_length_min")
+        v_max = self.get_optional("captcha", "code_length_max")
+        if v_min is None or v_min == "":
+            # If user only sets max, default min to 1.
+            if v_max is not None and v_max != "":
+                return 1
+            return self.captcha_code_length
+        try:
+            v_min = int(v_min)
+        except ValueError:
+            raise UserInputException("Invalid code_length_min: %r" % v_min)
+        return max(1, v_min)
+
+    @property
+    def captcha_code_length_max(self):
+        v_min = self.get_optional("captcha", "code_length_min")
+        v_max = self.get_optional("captcha", "code_length_max")
+        if v_max is None or v_max == "":
+            # If user only sets min, default max to min.
+            if v_min is not None and v_min != "":
+                try:
+                    v_min_i = int(v_min)
+                except ValueError:
+                    raise UserInputException("Invalid code_length_min: %r" % v_min)
+                return max(1, v_min_i)
+            return self.captcha_code_length
+        try:
+            v_max = int(v_max)
+        except ValueError:
+            raise UserInputException("Invalid code_length_max: %r" % v_max)
+        return max(1, v_max)
 
     @property
     def gemini_api_key(self):

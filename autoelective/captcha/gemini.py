@@ -63,7 +63,10 @@ class GeminiVLMRecognizer(CaptchaRecognizer):
         self._model = (cfg.gemini_model or os.getenv("GEMINI_MODEL") or "gemini-2.0-flash").strip()
         self._timeout = cfg.gemini_timeout
         self._max_output_tokens = cfg.gemini_max_output_tokens
-        self._expected_len = cfg.captcha_code_length
+        self._min_len = cfg.captcha_code_length_min
+        self._max_len = cfg.captcha_code_length_max
+        if self._min_len > self._max_len:
+            self._min_len, self._max_len = self._max_len, self._min_len
         self._session = requests.Session()
 
         if not self._api_key:
@@ -73,10 +76,14 @@ class GeminiVLMRecognizer(CaptchaRecognizer):
 
     def recognize(self, raw):
         img = _to_jpeg_bytes(raw)
+        if self._min_len == self._max_len:
+            len_rule = f"exactly {self._min_len} characters"
+        else:
+            len_rule = f"between {self._min_len} and {self._max_len} characters"
         prompt = (
             "You are an OCR engine. Read the captcha text from the image.\n"
             "Return STRICT JSON with a single key 'text'.\n"
-            f"The value must be exactly {self._expected_len} characters (A-Z, 0-9) with no spaces.\n"
+            f"The value must be {len_rule} (A-Z, 0-9) with no spaces.\n"
             "If uncertain, make your best guess.\n"
         )
         url = (
@@ -140,8 +147,8 @@ class GeminiVLMRecognizer(CaptchaRecognizer):
             pass
 
         code = _normalize_code(code_src)
-        if self._expected_len > 0 and len(code) != self._expected_len:
-            raise RecognizerError(msg="Recognizer ERROR: Unexpected code length: %r" % code)
         if not code:
             raise RecognizerError(msg="Recognizer ERROR: Empty result")
+        if len(code) < self._min_len or len(code) > self._max_len:
+            raise RecognizerError(msg="Recognizer ERROR: Unexpected code length: %r" % code)
         return Captcha(code, None, None, None, None)

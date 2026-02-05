@@ -8,6 +8,9 @@ from lxml import etree
 from .course import Course
 
 _regexBzfxSida = re.compile(r'\?sida=(\S+?)&sttp=(?:bzx|bfx)')
+_regexConfirmSelect = re.compile(
+    r"confirmSelect\('(?P<xh>[^']*)','(?P<teacher>[^']*)','(?P<name>[^']*)','(?P<class_no>[^']*)'"
+)
 
 
 def get_tree_from_response(r):
@@ -24,6 +27,26 @@ def get_table_header(table):
 
 def get_table_trs(table):
     return table.xpath('.//tr[@class="datagrid-odd" or @class="datagrid-even"]')
+
+def _cell_text(cell):
+    try:
+        texts = cell.xpath('.//text()')
+    except Exception:
+        return ""
+    if not texts:
+        return ""
+    return "".join(t.strip() for t in texts if t and t.strip()).strip()
+
+def _parse_quota_pair(text):
+    if text is None:
+        return None
+    nums = re.findall(r"\d+", str(text))
+    if len(nums) < 2:
+        return None
+    try:
+        return int(nums[0]), int(nums[1])
+    except Exception:
+        return None
 
 def get_title(tree):
     title = tree.find('.//head/title')
@@ -56,7 +79,14 @@ def get_courses(table):
     cs = []
     for tr in trs:
         t = tr.xpath('./th | ./td')
-        name, class_no, school = map(lambda ix: t[ix].xpath('.//text()')[0], ixs)
+        try:
+            name = _cell_text(t[ixs[0]])
+            class_no = _cell_text(t[ixs[1]])
+            school = _cell_text(t[ixs[2]])
+        except Exception:
+            continue
+        if not name or not class_no or not school:
+            continue
         c = Course(name, class_no, school)
         cs.append(c)
     return cs
@@ -68,10 +98,42 @@ def get_courses_with_detail(table):
     cs = []
     for tr in trs:
         t = tr.xpath('./th | ./td')
-        name, class_no, school, status, _ = map(lambda ix: t[ix].xpath('.//text()')[0], ixs)
-        status = tuple(map(int, status.split("/")))
-        href = t[ixs[-1]].xpath('./a/@href')[0]
+        try:
+            name = _cell_text(t[ixs[0]])
+            class_no = _cell_text(t[ixs[1]])
+            school = _cell_text(t[ixs[2]])
+            status_text = _cell_text(t[ixs[3]])
+        except Exception:
+            continue
+        status = _parse_quota_pair(status_text)
+        if status is None:
+            continue
+        hrefs = []
+        try:
+            hrefs = t[ixs[-1]].xpath('.//a/@href')
+        except Exception:
+            hrefs = []
+        href = hrefs[0] if hrefs else None
+        if not href:
+            continue
+
+        if not name:
+            # Some rows render course name via JS (e.g. English-taught graduate courses).
+            # Try to recover the name from confirmSelect(...) in the action link.
+            try:
+                onclicks = t[ixs[-1]].xpath('.//a/@onclick')
+            except Exception:
+                onclicks = []
+            onclick = onclicks[0] if onclicks else ""
+            mat = _regexConfirmSelect.search(onclick or "")
+            if mat:
+                recovered = mat.group("name") or ""
+                if recovered.strip():
+                    name = recovered.strip()
+
+        if not name or not class_no or not school:
+            continue
+
         c = Course(name, class_no, school, status, href)
         cs.append(c)
     return cs
-

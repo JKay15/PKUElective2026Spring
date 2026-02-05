@@ -296,11 +296,11 @@ def _apply_not_in_operation_backoff(base_sleep, had_not_in_operation):
 
 
 _re_cn_datetime = re.compile(
-    r"(?:(?P<y>\\d{4})年)?(?P<m>\\d{1,2})月(?P<d>\\d{1,2})日"
-    r"(?:(?P<ap>上午|下午|晚上|中午))?(?P<h>\\d{1,2}):(?P<min>\\d{2})"
+    r"(?:(?P<y>\d{4})年)?(?P<m>\d{1,2})月(?P<d>\d{1,2})日"
+    r"(?:(?P<ap>上午|下午|晚上|中午))?(?P<h>\d{1,2}):(?P<min>\d{2})"
 )
 _re_iso_datetime = re.compile(
-    r"(?P<y>\\d{4})[-/](?P<m>\\d{1,2})[-/](?P<d>\\d{1,2})\\s+(?P<h>\\d{1,2}):(?P<min>\\d{2})"
+    r"(?P<y>\d{4})[-/](?P<m>\d{1,2})[-/](?P<d>\d{1,2})\s+(?P<h>\d{1,2}):(?P<min>\d{2})"
 )
 
 

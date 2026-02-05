@@ -21,7 +21,7 @@ config = AutoElectiveConfig()
 _USER_REQUEST_LOG_DIR = os.path.join(REQUEST_LOG_DIR, config.get_user_subpath())
 mkdir(_USER_REQUEST_LOG_DIR)
 
-_regexErrorOperatingTime = re.compile(r'目前不是(.*?)时间，因此不能进行相应操作。')
+_regexErrorOperatingTime = re.compile(r'目前不是(.*?)(?:时间|阶段)(?:，?因此不能进行相应操作。)?')
 _regexElectionSuccess    = re.compile(r'补选（或者候补）课程(.*)成功，请查看已选上列表确认，并查看选课结果。')
 _regexMutex              = re.compile(r'(.+)与(.+)只能选其一门。')
 
@@ -116,6 +116,9 @@ def check_elective_title(r, **kwargs):
                 raise NotAgreedToSelectionAgreement(response=r)
 
             elif _regexErrorOperatingTime.search(err):
+                raise NotInOperationTimeError(response=r, msg=err)
+            elif err.startswith("目前不是") and ("阶段" in err or "时间" in err):
+                # Some deployments omit the "因此不能进行相应操作" suffix.
                 raise NotInOperationTimeError(response=r, msg=err)
 
             else:

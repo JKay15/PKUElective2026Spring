@@ -96,6 +96,19 @@ class HookOfflineTest(unittest.TestCase):
         with self.assertRaises(NotInOperationTimeError):
             check_drawservlet_image_or_system_page(r)
 
+    def test_drawservlet_html_not_in_operation_stage_variant(self):
+        html = (
+            "<html><head><title>系统提示</title></head><body>"
+            "<table><table><table><td><strong>出错提示:</strong>"
+            "目前不是补退选阶段！"
+            "</td></table></table></table>"
+            "</body></html>"
+        )
+        r = FakeResponse(text=html)
+        r.headers["Content-Type"] = "text/html;charset=UTF-8"
+        with self.assertRaises(NotInOperationTimeError):
+            check_drawservlet_image_or_system_page(r)
+
     def test_drawservlet_image_ok(self):
         r = FakeResponse(text="fake")
         r.headers["Content-Type"] = "image/png"

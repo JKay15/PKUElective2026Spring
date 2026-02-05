@@ -55,19 +55,81 @@ def get_title(tree):
     return title.text
 
 def get_errInfo(tree):
-    tds = tree.xpath(".//table//table//table//td")
-    assert len(tds) == 1
-    td = tds[0]
-    strong = td.getchildren()[0]
-    assert strong.tag == 'strong' and strong.text in ('出错提示:', '提示:')
-    return "".join(td.xpath('./text()')).strip()
+    # Be tolerant to HTML changes. Historically this page contains a <strong>
+    # label like "出错提示:" or "提示:" then the error message as sibling text.
+    labels = ("出错提示:", "提示:", "出错提示：", "提示：")
+    try:
+        strongs = tree.xpath(".//strong")
+    except Exception:
+        strongs = []
+    for strong in strongs:
+        try:
+            t = (strong.text or "").strip()
+        except Exception:
+            continue
+        if t not in labels:
+            continue
+        parent = strong.getparent()
+        if parent is None:
+            parent = strong
+        try:
+            full = "".join(parent.xpath("string()")).strip()
+        except Exception:
+            full = ""
+        if full:
+            msg = full.replace(t, "", 1).strip()
+            if msg:
+                return msg
+
+    # Fallback: scan tds and try to strip the label.
+    try:
+        tds = tree.xpath(".//td")
+    except Exception:
+        tds = []
+    for td in tds:
+        try:
+            s = "".join(td.xpath("string()")).strip()
+        except Exception:
+            continue
+        if not s:
+            continue
+        if "出错提示" in s or s.startswith("提示"):
+            for lab in labels:
+                s = s.replace(lab, "")
+            s = s.strip()
+            if s:
+                return s
+    return ""
 
 def get_tips(tree):
     tips = tree.xpath('.//td[@id="msgTips"]')
     if len(tips) == 0:
         return None
-    td = tips[0].xpath('.//table//table//td')[1]
-    return "".join(td.xpath('.//text()')).strip()
+    node = tips[0]
+    try:
+        cells = node.xpath(".//td")
+    except Exception:
+        cells = []
+    texts = []
+    for c in cells:
+        try:
+            s = "".join(c.xpath(".//text()")).strip()
+        except Exception:
+            continue
+        if not s:
+            continue
+        if s.lower() == "ignore":
+            continue
+        texts.append(s)
+    if not texts:
+        # last resort: plain text inside msgTips
+        try:
+            s = "".join(node.xpath(".//text()")).strip()
+        except Exception:
+            s = ""
+        return s or None
+    # pick the most informative one
+    return max(texts, key=len).strip()
 
 def get_sida(r):
     return _regexBzfxSida.search(r.text).group(1)

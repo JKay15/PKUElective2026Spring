@@ -189,8 +189,9 @@ def check_elective_tips(r, **kwargs):
 
         if tips is None:
             return
+        tips = tips.strip()
 
-        elif tips == "您已经选过该课程了。":
+        if tips == "您已经选过该课程了。":
             raise ElectionRepeatedError(response=r)
 
         elif tips == "对不起，超时操作，请重新登录。":
@@ -227,6 +228,15 @@ def check_elective_tips(r, **kwargs):
             raise MutexCourseError(response=r, msg=tips)
 
         else:
+            # Be tolerant to punctuation/wording variants across semesters.
+            if "超时" in tips and "重新登录" in tips:
+                raise OperationTimeoutError(response=r, msg=tips)
+            if "选课操作失败" in tips or ("操作失败" in tips and "选课" in tips):
+                raise ElectionFailedError(response=r, msg=tips)
+            if "选课人数已满" in tips or ("人数已满" in tips and "课程" in tips):
+                raise QuotaLimitedError(response=r, msg=tips)
+            if "已经选过" in tips and "课程" in tips:
+                raise ElectionRepeatedError(response=r, msg=tips)
             cout.warning("Unknown tips: %s" % tips)
             # raise TipsException(response=r, msg=tips)
 

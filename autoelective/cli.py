@@ -75,8 +75,6 @@ def run():
 
     from .environ import Environ
     from .logger import ConsoleLogger
-    from autoelective.loop import run_iaaa_loop, run_elective_loop
-    from autoelective.monitor import run_monitor
 
     environ = Environ()
     cout = ConsoleLogger("cli")
@@ -85,6 +83,11 @@ def run():
     options, args = parser.parse_args()
 
     setup_default_environ(options, args, environ)
+
+    # Import modules that instantiate AutoElectiveConfig only after config path is set.
+    # Otherwise `main.py -c xxx.ini` would be ignored due to early singleton init.
+    from autoelective.loop import run_iaaa_loop, run_elective_loop
+    from autoelective.monitor import run_monitor
 
     def _start_thread(t):
         t.daemon = True

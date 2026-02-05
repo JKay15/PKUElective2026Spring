@@ -158,6 +158,7 @@ def main():
     elect = _login(cfg)
 
     idx = 0
+    rc = 0
 
     def _capture(resp, name: str):
         nonlocal idx
@@ -178,30 +179,51 @@ def main():
             time.sleep(max(0.0, float(args.sleep)))
 
     # Always capture HelpController once; this includes schedule datagrid.
-    r = elect.get_HelpController()
-    _capture(r, "helpcontroller")
+    try:
+        r = elect.get_HelpController()
+        _capture(r, "helpcontroller")
+    except Exception as e:
+        print("[ERROR] capture helpcontroller failed:", repr(e))
+        print("Saved to:", args.out)
+        return 2
 
     if args.help_only:
         print("Saved to:", args.out)
         return 0
 
     # Capture SupplyCancel + following pages.
-    r = elect.get_SupplyCancel(student_id)
-    _capture(r, "supplycancel")
+    try:
+        r = elect.get_SupplyCancel(student_id)
+        _capture(r, "supplycancel")
+    except Exception as e:
+        print("[ERROR] capture supplycancel failed:", repr(e))
+        print("Tip: if not in operation time, retry later or use --help-only.")
+        rc = 2
+        print("Saved to:", args.out)
+        return rc
 
     pages = max(1, int(args.pages))
     for p in range(2, pages + 1):
-        r = elect.get_supplement(student_id, page=p)
-        _capture(r, f"supplement_p{p}")
+        try:
+            r = elect.get_supplement(student_id, page=p)
+            _capture(r, f"supplement_p{p}")
+        except Exception as e:
+            print(f"[ERROR] capture supplement_p{p} failed:", repr(e))
+            rc = 2
+            break
 
     for i in range(max(0, int(args.draw_count))):
-        r = elect.get_DrawServlet()
-        _capture(r, f"drawservlet_{i+1}")
+        try:
+            r = elect.get_DrawServlet()
+            _capture(r, f"drawservlet_{i+1}")
+        except Exception as e:
+            print(f"[ERROR] capture drawservlet_{i+1} failed:", repr(e))
+            rc = 2
+            break
 
     print("Saved to:", args.out)
-    return 0
+    return rc
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

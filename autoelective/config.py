@@ -94,7 +94,10 @@ class BaseConfig(object):
 class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
 
     def __init__(self):
-        super().__init__(environ.config_ini or DEFAULT_CONFIG_INI)
+        # Allow overriding config path without changing code/args, useful for
+        # offline tests and phase-based runbooks.
+        env_ini = os.getenv("AUTOELECTIVE_CONFIG_INI")
+        super().__init__(environ.config_ini or env_ini or DEFAULT_CONFIG_INI)
 
     ## Constraints
 

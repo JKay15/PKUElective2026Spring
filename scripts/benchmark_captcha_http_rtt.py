@@ -12,19 +12,6 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from autoelective.config import AutoElectiveConfig
-from autoelective.const import USER_AGENT_LIST
-from autoelective.iaaa import IAAAClient
-from autoelective.elective import ElectiveClient
-from autoelective.parser import get_sida
-from autoelective.exceptions import (
-    OperationFailedError,
-    ServerError,
-    StatusCodeError,
-    NotInOperationTimeError,
-)
-from requests.exceptions import RequestException
-
 
 def summarize(latencies):
     if not latencies:
@@ -55,6 +42,13 @@ def _dummy_code(length):
 
 
 def login(config):
+    # Late imports: these modules may instantiate AutoElectiveConfig at import time.
+    from autoelective.const import USER_AGENT_LIST
+    from autoelective.iaaa import IAAAClient
+    from autoelective.elective import ElectiveClient
+    from autoelective.parser import get_sida
+    from autoelective.exceptions import NotInOperationTimeError
+
     username = config.iaaa_id
     password = config.iaaa_password
     if not username or not password:
@@ -96,6 +90,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Measure captcha HTTP RTT: DrawServlet + Validate (no OCR)."
     )
+    parser.add_argument(
+        "-c",
+        "--config",
+        default=None,
+        help="config.ini path (optional). If set, overrides AUTOELECTIVE_CONFIG_INI for this process.",
+    )
     parser.add_argument("--samples", type=int, default=20, help="number of iterations")
     parser.add_argument("--sleep", type=float, default=0.05, help="sleep between iterations")
     parser.add_argument(
@@ -105,6 +105,19 @@ def main():
         help="override captcha length for dummy validation code",
     )
     args = parser.parse_args()
+
+    if args.config:
+        from autoelective.environ import Environ
+
+        Environ().config_ini = args.config
+
+    from autoelective.config import AutoElectiveConfig
+    from autoelective.exceptions import (
+        OperationFailedError,
+        ServerError,
+        StatusCodeError,
+    )
+    from requests.exceptions import RequestException
 
     config = AutoElectiveConfig()
     length = args.code_length or config.captcha_code_length

@@ -77,6 +77,13 @@ def _stat_error():
         "errors": environ.errors,
     })
 
+@monitor.route("/stat/runtime", methods=["GET"])
+def _stat_runtime():
+    return jsonify({
+        "stats": dict(environ.runtime_stats),
+        "gauges": dict(environ.runtime_gauges),
+    })
+
 
 def run_monitor():
     monitor.run(

@@ -135,6 +135,43 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         return self.getfloat("client", "random_deviation")
 
     @property
+    def refresh_backoff_enable(self):
+        return self.get_optional_bool("client", "refresh_backoff_enable", True)
+
+    @property
+    def refresh_backoff_factor(self):
+        v = self.get_optional("client", "refresh_backoff_factor")
+        if v is None or v == "":
+            return 1.6
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid refresh_backoff_factor: %r" % v)
+        return max(1.0, v)
+
+    @property
+    def refresh_backoff_max(self):
+        v = self.get_optional("client", "refresh_backoff_max")
+        if v is None or v == "":
+            return 60.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid refresh_backoff_max: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def refresh_backoff_threshold(self):
+        v = self.get_optional("client", "refresh_backoff_threshold")
+        if v is None or v == "":
+            return 2
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid refresh_backoff_threshold: %r" % v)
+        return max(1, v)
+
+    @property
     def iaaa_client_timeout(self):
         return self.getfloat("client", "iaaa_client_timeout")
 
@@ -147,12 +184,71 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         return self.getint("client", "elective_client_pool_size")
 
     @property
+    def client_pool_reset_threshold(self):
+        v = self.get_optional("client", "client_pool_reset_threshold")
+        if v is None or v == "":
+            return 5
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid client_pool_reset_threshold: %r" % v)
+        return max(1, v)
+
+    @property
+    def client_pool_reset_cooldown(self):
+        v = self.get_optional("client", "client_pool_reset_cooldown")
+        if v is None or v == "":
+            return 300.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid client_pool_reset_cooldown: %r" % v)
+        return max(0.0, v)
+
+    @property
     def elective_client_max_life(self):
         return self.getint("client", "elective_client_max_life")
 
     @property
     def login_loop_interval(self):
         return self.getfloat("client", "login_loop_interval")
+
+    @property
+    def iaaa_backoff_enable(self):
+        return self.get_optional_bool("client", "iaaa_backoff_enable", True)
+
+    @property
+    def iaaa_backoff_factor(self):
+        v = self.get_optional("client", "iaaa_backoff_factor")
+        if v is None or v == "":
+            return 1.6
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid iaaa_backoff_factor: %r" % v)
+        return max(1.0, v)
+
+    @property
+    def iaaa_backoff_max(self):
+        v = self.get_optional("client", "iaaa_backoff_max")
+        if v is None or v == "":
+            return 60.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid iaaa_backoff_max: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def iaaa_backoff_threshold(self):
+        v = self.get_optional("client", "iaaa_backoff_threshold")
+        if v is None or v == "":
+            return 2
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid iaaa_backoff_threshold: %r" % v)
+        return max(1, v)
 
     @property
     def is_print_mutex_rules(self):
@@ -384,6 +480,516 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
     @property
     def captcha_fallback_providers(self):
         return [s.strip().lower() for s in self.get_optional_list("captcha", "fallback_providers")]
+
+    # [resilience]
+
+    @property
+    def critical_cooldown_seconds(self):
+        v = self.get_optional("resilience", "critical_cooldown_seconds")
+        if v is None or v == "":
+            return 600.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid critical_cooldown_seconds: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def critical_notify_interval(self):
+        v = self.get_optional("resilience", "critical_notify_interval")
+        if v is None or v == "":
+            return 300.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid critical_notify_interval: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def critical_reset_cache(self):
+        return self.get_optional_bool("resilience", "critical_reset_cache", True)
+
+    @property
+    def critical_reset_sessions(self):
+        return self.get_optional_bool("resilience", "critical_reset_sessions", True)
+
+    @property
+    def failure_notify_threshold(self):
+        v = self.get_optional("resilience", "failure_notify_threshold")
+        if v is None or v == "":
+            return 10
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid failure_notify_threshold: %r" % v)
+        return max(1, v)
+
+    @property
+    def failure_notify_interval(self):
+        v = self.get_optional("resilience", "failure_notify_interval")
+        if v is None or v == "":
+            return 300.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid failure_notify_interval: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def failure_cooldown_seconds(self):
+        v = self.get_optional("resilience", "failure_cooldown_seconds")
+        if v is None or v == "":
+            return 180.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid failure_cooldown_seconds: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def not_in_operation_cooldown_seconds(self):
+        v = self.get_optional("resilience", "not_in_operation_cooldown_seconds")
+        if v is None or v == "":
+            return 30.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid not_in_operation_cooldown_seconds: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def not_in_operation_min_refresh(self):
+        v = self.get_optional("resilience", "not_in_operation_min_refresh")
+        if v is None or v == "":
+            return 5.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid not_in_operation_min_refresh: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def not_in_operation_skip_pool_reset(self):
+        return self.get_optional_bool("resilience", "not_in_operation_skip_pool_reset", True)
+
+    @property
+    def html_parse_error_threshold(self):
+        v = self.get_optional("resilience", "html_parse_error_threshold")
+        if v is None or v == "":
+            return 3
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid html_parse_error_threshold: %r" % v)
+        return max(0, v)
+
+    @property
+    def html_parse_cooldown_seconds(self):
+        v = self.get_optional("resilience", "html_parse_cooldown_seconds")
+        if v is None or v == "":
+            return 10.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid html_parse_cooldown_seconds: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def html_parse_reset_sessions(self):
+        return self.get_optional_bool("resilience", "html_parse_reset_sessions", True)
+
+    @property
+    def auth_error_threshold(self):
+        v = self.get_optional("resilience", "auth_error_threshold")
+        if v is None or v == "":
+            return 5
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid auth_error_threshold: %r" % v)
+        return max(0, v)
+
+    @property
+    def auth_cooldown_seconds(self):
+        v = self.get_optional("resilience", "auth_cooldown_seconds")
+        if v is None or v == "":
+            return 10.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid auth_cooldown_seconds: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def auth_reset_sessions(self):
+        return self.get_optional_bool("resilience", "auth_reset_sessions", True)
+
+    @property
+    def captcha_adaptive_enable(self):
+        return self.get_optional_bool("captcha", "adaptive_enable", False)
+
+    @property
+    def captcha_adaptive_min_samples(self):
+        v = self.get_optional("captcha", "adaptive_min_samples")
+        if v is None or v == "":
+            return 10
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_min_samples: %r" % v)
+        return max(1, v)
+
+    @property
+    def captcha_adaptive_epsilon(self):
+        v = self.get_optional("captcha", "adaptive_epsilon")
+        if v is None or v == "":
+            return 0.1
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_epsilon: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def captcha_adaptive_latency_alpha(self):
+        v = self.get_optional("captcha", "adaptive_latency_alpha")
+        if v is None or v == "":
+            return 0.2
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_latency_alpha: %r" % v)
+        return min(1.0, max(0.01, v))
+
+    @property
+    def captcha_adaptive_h_alpha(self):
+        v = self.get_optional("captcha", "adaptive_h_alpha")
+        if v is None or v == "":
+            return 0.2
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_h_alpha: %r" % v)
+        return min(1.0, max(0.01, v))
+
+    @property
+    def captcha_adaptive_h_init(self):
+        v = self.get_optional("captcha", "adaptive_h_init")
+        if v is None or v == "":
+            return None
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_h_init: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def captcha_adaptive_update_interval(self):
+        v = self.get_optional("captcha", "adaptive_update_interval")
+        if v is None or v == "":
+            return 20
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_update_interval: %r" % v)
+        return max(0, v)
+
+    @property
+    def captcha_adaptive_fail_streak_degrade(self):
+        v = self.get_optional("captcha", "adaptive_fail_streak_degrade")
+        if v is None or v == "":
+            return 3
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_fail_streak_degrade: %r" % v)
+        return max(0, v)
+
+    @property
+    def captcha_adaptive_score_alpha(self):
+        v = self.get_optional("captcha", "adaptive_score_alpha")
+        if v is None or v == "":
+            return 0.4
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_score_alpha: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def captcha_adaptive_score_beta(self):
+        v = self.get_optional("captcha", "adaptive_score_beta")
+        if v is None or v == "":
+            return 0.6
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_score_beta: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def captcha_sample_enable(self):
+        return self.get_optional_bool("captcha", "sample_enable", False)
+
+    @property
+    def captcha_sample_rate(self):
+        v = self.get_optional("captcha", "sample_rate")
+        if v is None or v == "":
+            return 0.05
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid sample_rate: %r" % v)
+        return min(1.0, max(0.0, v))
+
+    @property
+    def captcha_sample_dir(self):
+        v = self.get_optional("captcha", "sample_dir")
+        if v is None or v == "":
+            return "cache/captcha_samples"
+        return v
+
+    @property
+    def captcha_probe_enabled(self):
+        return self.get_optional_bool("captcha", "probe_enabled", False)
+
+    @property
+    def captcha_probe_interval(self):
+        v = self.get_optional("captcha", "probe_interval")
+        if v is None or v == "":
+            return 30.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid probe_interval: %r" % v)
+        return max(1.0, v)
+
+    @property
+    def captcha_probe_backoff(self):
+        v = self.get_optional("captcha", "probe_backoff")
+        if v is None or v == "":
+            return 600.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid probe_backoff: %r" % v)
+        return max(1.0, v)
+
+    @property
+    def captcha_probe_random_deviation(self):
+        v = self.get_optional("captcha", "probe_random_deviation")
+        if v is None or v == "":
+            return 0.1
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid probe_random_deviation: %r" % v)
+        return min(1.0, max(0.0, v))
+
+    @property
+    def captcha_adaptive_report_interval(self):
+        v = self.get_optional("captcha", "adaptive_report_interval")
+        if v is None or v == "":
+            return 0
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_report_interval: %r" % v)
+        return max(0, v)
+
+    @property
+    def runtime_stat_report_interval(self):
+        v = self.get_optional("runtime", "report_interval")
+        if v is None or v == "":
+            return 0
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid runtime report_interval: %r" % v)
+        return max(0, v)
+
+    @property
+    def runtime_rate_window_seconds(self):
+        v = self.get_optional("runtime", "rate_window_seconds")
+        if v is None or v == "":
+            return 60.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid runtime rate_window_seconds: %r" % v)
+        return max(1.0, v)
+
+    @property
+    def runtime_error_aggregate_interval(self):
+        v = self.get_optional("runtime", "error_aggregate_interval")
+        if v is None or v == "":
+            return 60.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid runtime error_aggregate_interval: %r" % v)
+        return max(0.0, v)
+
+    # [rate_limit]
+
+    @property
+    def rate_limit_enable(self):
+        return self.get_optional_bool("rate_limit", "enable", default=False)
+
+    @property
+    def rate_limit_global_rps(self):
+        v = self.get_optional("rate_limit", "global_rps")
+        if v is None or v == "":
+            return 0.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid rate_limit global_rps: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def rate_limit_global_burst(self):
+        v = self.get_optional("rate_limit", "global_burst")
+        if v is None or v == "":
+            return 0.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid rate_limit global_burst: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def rate_limit_elective_rps(self):
+        v = self.get_optional("rate_limit", "elective_rps")
+        if v is None or v == "":
+            return 0.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid rate_limit elective_rps: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def rate_limit_elective_burst(self):
+        v = self.get_optional("rate_limit", "elective_burst")
+        if v is None or v == "":
+            return 0.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid rate_limit elective_burst: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def rate_limit_iaaa_rps(self):
+        v = self.get_optional("rate_limit", "iaaa_rps")
+        if v is None or v == "":
+            return 0.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid rate_limit iaaa_rps: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def rate_limit_iaaa_burst(self):
+        v = self.get_optional("rate_limit", "iaaa_burst")
+        if v is None or v == "":
+            return 0.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid rate_limit iaaa_burst: %r" % v)
+        return max(0.0, v)
+
+    # [captcha]
+
+    @property
+    def captcha_probe_pool_size(self):
+        v = self.get_optional("captcha", "probe_pool_size")
+        if v is None or v == "":
+            return 1
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid probe_pool_size: %r" % v)
+        return max(0, v)
+
+    @property
+    def captcha_probe_share_pool(self):
+        return self.get_optional_bool("captcha", "probe_share_pool", False)
+
+    # [offline]
+
+    @property
+    def offline_enabled(self):
+        return self.get_optional_bool("offline", "enable", True)
+
+    @property
+    def offline_error_threshold(self):
+        v = self.get_optional("offline", "error_threshold", 3)
+        try:
+            v = int(v)
+        except ValueError:
+            raise UserInputException("Invalid offline.error_threshold: %r" % v)
+        if v < 1:
+            raise UserInputException("Invalid offline.error_threshold: %r" % v)
+        return v
+
+    @property
+    def offline_cooldown_seconds(self):
+        v = self.get_optional("offline", "cooldown_seconds", 10)
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid offline.cooldown_seconds: %r" % v)
+        if v < 0:
+            raise UserInputException("Invalid offline.cooldown_seconds: %r" % v)
+        return v
+
+    @property
+    def offline_probe_interval(self):
+        v = self.get_optional("offline", "probe_interval", 15)
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid offline.probe_interval: %r" % v)
+        if v < 1:
+            raise UserInputException("Invalid offline.probe_interval: %r" % v)
+        return v
+
+    @property
+    def offline_probe_timeout(self):
+        v = self.get_optional("offline", "probe_timeout", 5)
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid offline.probe_timeout: %r" % v)
+        if v <= 0:
+            raise UserInputException("Invalid offline.probe_timeout: %r" % v)
+        return v
+
+    @property
+    def offline_observe_seconds(self):
+        v = self.get_optional("offline", "observe_seconds", 30)
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid offline.observe_seconds: %r" % v)
+        if v < 0:
+            raise UserInputException("Invalid offline.observe_seconds: %r" % v)
+        return v
+
+    @property
+    def offline_observe_min_refresh(self):
+        v = self.get_optional("offline", "observe_min_refresh", 2)
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid offline.observe_min_refresh: %r" % v)
+        if v < 0:
+            raise UserInputException("Invalid offline.observe_min_refresh: %r" % v)
+        return v
 
     # [course]
 

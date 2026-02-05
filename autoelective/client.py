@@ -6,6 +6,7 @@
 from requests.models import Request
 from requests.sessions import Session
 from requests.cookies import extract_cookies_to_jar
+from . import rate_limit
 
 class BaseClient(object):
 
@@ -51,6 +52,9 @@ class BaseClient(object):
         settings = self._session.merge_environment_settings(
             prep.url, proxies, stream, verify, cert
         )
+
+        # rate limiting (global + per-host)
+        rate_limit.throttle(prep.url)
 
         # Send the request.
         send_kwargs = {

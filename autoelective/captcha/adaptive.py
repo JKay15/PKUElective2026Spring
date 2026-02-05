@@ -253,3 +253,63 @@ class CaptchaAdaptiveManager(object):
                 "h": self._h.value,
                 "stats": data,
             }
+
+    def load_snapshot(self, snapshot):
+        """
+        Best-effort restore from `snapshot()` output.
+        This is used for cold-start reduction across restarts.
+        """
+        if not snapshot or not isinstance(snapshot, dict):
+            return False
+
+        def _to_int(x, default=0):
+            try:
+                return int(x)
+            except Exception:
+                return default
+
+        def _to_float(x):
+            try:
+                if x is None:
+                    return None
+                v = float(x)
+                if v != v:  # NaN
+                    return None
+                if v < 0:
+                    return None
+                return v
+            except Exception:
+                return None
+
+        with self._lock:
+            h = _to_float(snapshot.get("h"))
+            if h is not None:
+                self._h._value = h
+
+            # Keep current provider order (from config), but make sure stats exist.
+            providers = snapshot.get("providers") or []
+            for p in providers:
+                if p not in self._stats:
+                    self._stats[p] = _Stats(self._latency_alpha, self._h_alpha)
+                if p not in self._base_order:
+                    self._base_order.append(p)
+
+            stats = snapshot.get("stats") or {}
+            if isinstance(stats, dict):
+                for p, st_data in stats.items():
+                    if not isinstance(st_data, dict):
+                        continue
+                    st = self._stats.get(p)
+                    if st is None:
+                        st = _Stats(self._latency_alpha, self._h_alpha)
+                        self._stats[p] = st
+                        if p not in self._base_order:
+                            self._base_order.append(p)
+                    st.count = max(0, _to_int(st_data.get("count"), 0))
+                    st.success = max(0, _to_int(st_data.get("success"), 0))
+                    st.failure = max(0, _to_int(st_data.get("failure"), 0))
+                    st.fail_streak = max(0, _to_int(st_data.get("fail_streak"), 0))
+                    st.latency._value = _to_float(st_data.get("latency"))
+                    st.h_latency._value = _to_float(st_data.get("h_latency"))
+
+            return True

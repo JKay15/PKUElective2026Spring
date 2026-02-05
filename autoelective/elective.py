@@ -9,13 +9,19 @@ import random
 from urllib.parse import quote
 from .client import BaseClient
 from .hook import get_hooks, debug_dump_request, debug_print_request, check_status_code, with_etree,\
-    check_elective_title, check_elective_tips
+    check_elective_title, check_elective_tips, check_drawservlet_image_or_system_page
 from .const import ElectiveURL
 
 _hooks_check_status_code = get_hooks(
     # debug_dump_request,
     debug_print_request,
     check_status_code,
+)
+
+_hooks_check_drawservlet = get_hooks(
+    debug_print_request,
+    check_status_code,
+    check_drawservlet_image_or_system_page,
 )
 
 _hooks_check_title = get_hooks(
@@ -185,7 +191,7 @@ class ElectiveClient(BaseClient):
                 "Rand": str(random.random() * 10000),
             },
             headers=headers,
-            hooks=_hooks_check_status_code,
+            hooks=_hooks_check_drawservlet,
             **kwargs,
         )
         return r

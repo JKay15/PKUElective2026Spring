@@ -127,6 +127,57 @@ def check_elective_title(r, **kwargs):
         raise e
 
 
+def _looks_like_image(content):
+    if not content:
+        return False
+    # PNG
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    # JPEG
+    if content.startswith(b"\xff\xd8\xff"):
+        return True
+    # GIF
+    if content.startswith(b"GIF87a") or content.startswith(b"GIF89a"):
+        return True
+    # BMP
+    if content.startswith(b"BM"):
+        return True
+    # WebP: RIFF....WEBP
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return True
+    return False
+
+
+def check_drawservlet_image_or_system_page(r, **kwargs):
+    """
+    DrawServlet should return an image captcha. When the elective system is not in
+    operation time or the session is invalid, it may return an HTML "系统提示" page
+    instead. In that case, parse and raise the corresponding exception (e.g.
+    NotInOperationTimeError / SessionExpiredError) so callers can backoff/relogin.
+    """
+    ctype = ""
+    try:
+        # requests normalizes header keys, but be defensive
+        ctype = r.headers.get("Content-Type") or r.headers.get("content-type") or ""
+    except Exception:
+        ctype = ""
+    if isinstance(ctype, str) and ctype.lower().startswith("image/"):
+        return
+    content = getattr(r, "content", b"") or b""
+    if _looks_like_image(content):
+        return
+    # Not an image: try to parse as HTML error/system page.
+    with_etree(r)
+    try:
+        check_elective_title(r)
+    except Exception:
+        raise
+    raise UnexceptedHTMLFormat(
+        response=r,
+        msg="DrawServlet returned non-image response (content-type=%r)" % ctype,
+    )
+
+
 def check_elective_tips(r, **kwargs):
     assert hasattr(r, "_tree")
     tips = get_tips(r._tree)

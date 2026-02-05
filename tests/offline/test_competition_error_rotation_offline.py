@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import threading
+import time
 import unittest
 from collections import OrderedDict
+from queue import Empty
 from unittest import mock
 
 from autoelective.course import Course
@@ -83,6 +85,7 @@ class CompetitionErrorRotationOfflineTest(unittest.TestCase):
 
         elect_calls = {"n": 0}
         done_event = threading.Event()
+        login_stop = threading.Event()
 
         def _supply_cancel(self, username, **kwargs):
             return _DummyResp()
@@ -106,6 +109,22 @@ class CompetitionErrorRotationOfflineTest(unittest.TestCase):
                 raise ElectionFailedError(response=_DummyResp(), msg="election failed")
             done_event.set()
             raise ElectionSuccess(response=_DummyResp(), msg="ok")
+
+        def _login_worker():
+            # Minimal relogin worker for offline tests: move clients back from reloginPool.
+            while not login_stop.is_set():
+                try:
+                    c = loop.reloginPool.get(timeout=0.05)
+                except Empty:
+                    continue
+                if c is loop.killedElective:
+                    break
+                try:
+                    c._session.cookies.set("a", "b")
+                    c.set_expired_time(-1)
+                except Exception:
+                    pass
+                loop._return_client(loop.electivePool, c, "electivePool")
 
         orig_make_client = loop._make_client
 
@@ -140,6 +159,10 @@ class CompetitionErrorRotationOfflineTest(unittest.TestCase):
                 loop._last_pool_reset_at = 0.0
                 loop._reset_client_pool("test_init", force=True)
 
+                lt = threading.Thread(target=_login_worker, name="TestLogin")
+                lt.daemon = True
+                lt.start()
+
                 t = threading.Thread(target=loop.run_elective_loop)
                 t.daemon = True
                 t.start()
@@ -148,6 +171,8 @@ class CompetitionErrorRotationOfflineTest(unittest.TestCase):
                 loop.goals.clear()
                 loop.ignored.clear()
                 t.join(timeout=5.0)
+                login_stop.set()
+                lt.join(timeout=2.0)
 
                 self.assertFalse(t.is_alive(), "run_elective_loop did not stop")
                 self.assertTrue(done_event.is_set(), "success event not triggered")
@@ -155,10 +180,14 @@ class CompetitionErrorRotationOfflineTest(unittest.TestCase):
                 self.assertNotIn(course.to_simplified(), loop.ignored)
 
                 errors = loop.environ.errors
-                self.assertGreaterEqual(errors.get("[331] QuotaLimitedError", 0), 1)
                 self.assertGreaterEqual(errors.get("[336] ElectionFailedError", 0), 1)
                 self.assertGreaterEqual(errors.get("[334] OperationTimeoutError", 0), 1)
+                self.assertGreaterEqual(loop.environ.runtime_stats.get("elect_quota_limited", 0), 1)
         finally:
+            try:
+                login_stop.set()
+            except Exception:
+                pass
             loop.MIN_REFRESH_INTERVAL = orig["MIN_REFRESH_INTERVAL"]
             loop.refresh_interval = orig["refresh_interval"]
             loop.refresh_random_deviation = orig["refresh_random_deviation"]

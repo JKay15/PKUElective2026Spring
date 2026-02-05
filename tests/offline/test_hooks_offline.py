@@ -7,6 +7,7 @@ from autoelective.hook import (
     check_iaaa_success,
     check_elective_title,
     check_elective_tips,
+    check_drawservlet_image_or_system_page,
 )
 from autoelective.exceptions import (
     ServerError,
@@ -14,6 +15,7 @@ from autoelective.exceptions import (
     IAAAForbiddenError,
     IAAANotSuccessError,
     InvalidTokenError,
+    NotInOperationTimeError,
     ElectionRepeatedError,
 )
 
@@ -80,6 +82,24 @@ class HookOfflineTest(unittest.TestCase):
         with_etree(r)
         with self.assertRaises(ElectionRepeatedError):
             check_elective_tips(r)
+
+    def test_drawservlet_html_not_in_operation(self):
+        html = (
+            "<html><head><title>系统提示</title></head><body>"
+            "<table><table><table><td><strong>出错提示:</strong>"
+            "目前不是补退选时间，因此不能进行相应操作。"
+            "</td></table></table></table>"
+            "</body></html>"
+        )
+        r = FakeResponse(text=html)
+        r.headers["Content-Type"] = "text/html;charset=UTF-8"
+        with self.assertRaises(NotInOperationTimeError):
+            check_drawservlet_image_or_system_page(r)
+
+    def test_drawservlet_image_ok(self):
+        r = FakeResponse(text="fake")
+        r.headers["Content-Type"] = "image/png"
+        check_drawservlet_image_or_system_page(r)
 
 
 if __name__ == "__main__":

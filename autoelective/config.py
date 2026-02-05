@@ -573,6 +573,36 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         return self.get_optional_bool("resilience", "not_in_operation_skip_pool_reset", True)
 
     @property
+    def not_in_operation_dynamic_enable(self):
+        return self.get_optional_bool("resilience", "not_in_operation_dynamic_enable", True)
+
+    @property
+    def not_in_operation_schedule_ttl_seconds(self):
+        v = self.get_optional("resilience", "not_in_operation_schedule_ttl_seconds")
+        if v is None or v == "":
+            return 6 * 3600.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid not_in_operation_schedule_ttl_seconds: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def not_in_operation_dynamic_long_sleep_max(self):
+        v = self.get_optional("resilience", "not_in_operation_dynamic_long_sleep_max")
+        if v is None or v == "":
+            return 3600.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid not_in_operation_dynamic_long_sleep_max: %r" % v)
+        return max(0.0, v)
+
+    @property
+    def warmup_after_login_enable(self):
+        return self.get_optional_bool("resilience", "warmup_after_login_enable", False)
+
+    @property
     def html_parse_error_threshold(self):
         v = self.get_optional("resilience", "html_parse_error_threshold")
         if v is None or v == "":
@@ -796,6 +826,28 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         except ValueError:
             raise UserInputException("Invalid adaptive_report_interval: %r" % v)
         return max(0, v)
+
+    @property
+    def captcha_adaptive_persist_enable(self):
+        return self.get_optional_bool("captcha", "adaptive_persist_enable", False)
+
+    @property
+    def captcha_adaptive_persist_path(self):
+        v = self.get_optional("captcha", "adaptive_persist_path")
+        if v is None or v == "":
+            return "cache/captcha_adaptive_snapshot.json"
+        return v
+
+    @property
+    def captcha_adaptive_persist_interval_seconds(self):
+        v = self.get_optional("captcha", "adaptive_persist_interval_seconds")
+        if v is None or v == "":
+            return 60.0
+        try:
+            v = float(v)
+        except ValueError:
+            raise UserInputException("Invalid adaptive_persist_interval_seconds: %r" % v)
+        return max(0.0, v)
 
     @property
     def runtime_stat_report_interval(self):

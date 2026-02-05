@@ -5,6 +5,7 @@ import threading
 import time
 import unittest
 from collections import OrderedDict
+from queue import Empty
 from unittest import mock
 
 from requests.exceptions import RequestException
@@ -91,6 +92,7 @@ class FaultInjectionOfflineTest(unittest.TestCase):
 
         # Fault schedule for SupplyCancel
         call_state = {"supply": 0, "validate": 0}
+        login_stop = threading.Event()
 
         def _supply_cancel(self, username, **kwargs):
             call_state["supply"] += 1
@@ -151,6 +153,25 @@ class FaultInjectionOfflineTest(unittest.TestCase):
                 loop._last_pool_reset_at = 0.0
                 loop._reset_client_pool("fault_init", force=True)
 
+                def _login_worker():
+                    while not login_stop.is_set():
+                        try:
+                            c = loop.reloginPool.get(timeout=0.05)
+                        except Empty:
+                            continue
+                        if c is loop.killedElective:
+                            break
+                        try:
+                            c._session.cookies.set("a", "b")
+                            c.set_expired_time(-1)
+                        except Exception:
+                            pass
+                        loop._return_client(loop.electivePool, c, "electivePool")
+
+                lt = threading.Thread(target=_login_worker, name="TestLogin")
+                lt.daemon = True
+                lt.start()
+
                 t = threading.Thread(target=loop.run_elective_loop)
                 t.daemon = True
                 t.start()
@@ -163,6 +184,8 @@ class FaultInjectionOfflineTest(unittest.TestCase):
                 loop.goals.clear()
                 loop.ignored.clear()
                 t.join(timeout=5.0)
+                login_stop.set()
+                lt.join(timeout=2.0)
 
                 self.assertFalse(t.is_alive(), "run_elective_loop did not stop")
 
@@ -178,6 +201,10 @@ class FaultInjectionOfflineTest(unittest.TestCase):
                     self.assertGreater(max(sleep_calls), min(sleep_calls))
 
         finally:
+            try:
+                login_stop.set()
+            except Exception:
+                pass
             loop.MIN_REFRESH_INTERVAL = orig["MIN_REFRESH_INTERVAL"]
             loop.refresh_interval = orig["refresh_interval"]
             loop.refresh_random_deviation = orig["refresh_random_deviation"]

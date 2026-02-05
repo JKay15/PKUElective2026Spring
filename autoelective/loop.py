@@ -9,6 +9,8 @@ import threading
 import socket
 import hashlib
 import json as stdjson
+import re
+from datetime import datetime
 from queue import Queue, Empty, Full
 from collections import deque, defaultdict
 from itertools import combinations
@@ -145,12 +147,29 @@ OFFLINE_OBSERVE_MIN_REFRESH = config.offline_observe_min_refresh
 NOT_IN_OPERATION_COOLDOWN_SECONDS = config.not_in_operation_cooldown_seconds
 NOT_IN_OPERATION_MIN_REFRESH = config.not_in_operation_min_refresh
 NOT_IN_OPERATION_SKIP_POOL_RESET = config.not_in_operation_skip_pool_reset
+NOT_IN_OPERATION_DYNAMIC_ENABLE = getattr(config, "not_in_operation_dynamic_enable", True)
+NOT_IN_OPERATION_SCHEDULE_TTL_SECONDS = getattr(
+    config, "not_in_operation_schedule_ttl_seconds", 6 * 3600.0
+)
+NOT_IN_OPERATION_DYNAMIC_LONG_SLEEP_MAX = getattr(
+    config, "not_in_operation_dynamic_long_sleep_max", 3600.0
+)
 HTML_PARSE_ERROR_THRESHOLD = config.html_parse_error_threshold
 HTML_PARSE_COOLDOWN_SECONDS = config.html_parse_cooldown_seconds
 HTML_PARSE_RESET_SESSIONS = config.html_parse_reset_sessions
 AUTH_ERROR_THRESHOLD = config.auth_error_threshold
 AUTH_COOLDOWN_SECONDS = config.auth_cooldown_seconds
 AUTH_RESET_SESSIONS = config.auth_reset_sessions
+
+CAPTCHA_ADAPTIVE_PERSIST_ENABLE = getattr(config, "captcha_adaptive_persist_enable", False)
+CAPTCHA_ADAPTIVE_PERSIST_PATH = getattr(
+    config, "captcha_adaptive_persist_path", "cache/captcha_adaptive_snapshot.json"
+)
+CAPTCHA_ADAPTIVE_PERSIST_INTERVAL_SECONDS = getattr(
+    config, "captcha_adaptive_persist_interval_seconds", 60.0
+)
+
+WARMUP_AFTER_LOGIN_ENABLE = getattr(config, "warmup_after_login_enable", False)
 
 RUNTIME_STAT_REPORT_INTERVAL = getattr(config, "runtime_stat_report_interval", 0)
 electivePool = Queue(maxsize=elective_client_pool_size)
@@ -198,6 +217,14 @@ _error_agg_lock = threading.Lock()
 _offline_lock = threading.Lock()
 _offline_probe_lock = threading.Lock()
 _sample_lock = threading.Lock()
+_adaptive_persist_lock = threading.Lock()
+_adaptive_persist_last_at = 0.0
+_adaptive_snapshot_loaded = False
+_help_schedule_lock = threading.Lock()
+_help_schedule_fetched_at = 0.0
+_help_schedule_items = None
+_not_in_operation_min_refresh_dynamic = NOT_IN_OPERATION_MIN_REFRESH
+_not_in_operation_backoff_reason = ""
 _error_agg_last = 0.0
 _error_agg_counts = defaultdict(int)
 _RATE_KEYS = {
@@ -260,9 +287,282 @@ def _compute_backoff(base, errors, threshold, factor, max_extra):
 def _apply_not_in_operation_backoff(base_sleep, had_not_in_operation):
     if not had_not_in_operation:
         return base_sleep
-    if NOT_IN_OPERATION_MIN_REFRESH <= 0:
+    mr = _not_in_operation_min_refresh_dynamic
+    if mr is None:
+        mr = NOT_IN_OPERATION_MIN_REFRESH
+    if mr <= 0:
         return base_sleep
-    return max(base_sleep, NOT_IN_OPERATION_MIN_REFRESH)
+    return max(base_sleep, mr)
+
+
+_re_cn_datetime = re.compile(
+    r"(?:(?P<y>\\d{4})年)?(?P<m>\\d{1,2})月(?P<d>\\d{1,2})日"
+    r"(?:(?P<ap>上午|下午|晚上|中午))?(?P<h>\\d{1,2}):(?P<min>\\d{2})"
+)
+_re_iso_datetime = re.compile(
+    r"(?P<y>\\d{4})[-/](?P<m>\\d{1,2})[-/](?P<d>\\d{1,2})\\s+(?P<h>\\d{1,2}):(?P<min>\\d{2})"
+)
+
+
+def _parse_cn_dt(text, now_ts=None):
+    if text is None:
+        return None
+    s = str(text).strip()
+    if not s:
+        return None
+    mat = _re_iso_datetime.search(s)
+    if mat:
+        try:
+            y = int(mat.group("y"))
+            m = int(mat.group("m"))
+            d = int(mat.group("d"))
+            hh = int(mat.group("h"))
+            mm = int(mat.group("min"))
+            return datetime(y, m, d, hh, mm, 0).timestamp()
+        except Exception:
+            return None
+    mat = _re_cn_datetime.search(s)
+    if not mat:
+        return None
+    try:
+        now = time.localtime(now_ts or time.time())
+        y = mat.group("y")
+        y = int(y) if y else int(now.tm_year)
+        m = int(mat.group("m"))
+        d = int(mat.group("d"))
+        ap = mat.group("ap") or ""
+        hh = int(mat.group("h"))
+        mm = int(mat.group("min"))
+        if ap in ("下午", "晚上", "中午") and hh < 12:
+            hh += 12
+        ts = datetime(y, m, d, hh, mm, 0).timestamp()
+        # Heuristic for year rollover (e.g., Dec -> next year's Jan)
+        if now_ts is not None and ts < now_ts - 7 * 86400 and m < now.tm_mon:
+            ts = datetime(y + 1, m, d, hh, mm, 0).timestamp()
+        return ts
+    except Exception:
+        return None
+
+
+def _parse_help_schedule(tree, now_ts=None):
+    """
+    Parse operation schedule from HelpController.jpf.
+    Returns list of dicts: {name, start_ts, end_ts}.
+    """
+    try:
+        tables = get_tables(tree)
+    except Exception:
+        tables = []
+
+    def _find_col(header, keywords):
+        for kw in keywords:
+            for i, h in enumerate(header):
+                try:
+                    if kw in h:
+                        return i
+                except Exception:
+                    continue
+        return None
+
+    items = []
+    for tbl in tables:
+        header = tbl.xpath('.//tr[@class="datagrid-header"]/th/text()')
+        if not header:
+            continue
+        start_ix = _find_col(header, ["开始时间", "开始"])
+        end_ix = _find_col(header, ["结束时间", "结束"])
+        if start_ix is None or end_ix is None:
+            continue
+        name_ix = _find_col(header, ["项目", "阶段", "选课阶段", "内容"])
+        if name_ix is None:
+            name_ix = 0
+        trs = tbl.xpath('.//tr[@class="datagrid-odd" or @class="datagrid-even"]')
+        for tr in trs:
+            tds = tr.xpath("./th | ./td")
+            if not tds:
+                continue
+            try:
+                name = "".join(tds[name_ix].xpath(".//text()")).strip()
+                start_s = "".join(tds[start_ix].xpath(".//text()")).strip()
+                end_s = "".join(tds[end_ix].xpath(".//text()")).strip()
+            except Exception:
+                continue
+            start_ts = _parse_cn_dt(start_s, now_ts=now_ts)
+            end_ts = _parse_cn_dt(end_s, now_ts=now_ts)
+            if not name or start_ts is None or end_ts is None:
+                continue
+            items.append({"name": name, "start_ts": start_ts, "end_ts": end_ts})
+    return items
+
+
+def _get_help_schedule(elective=None, force_refresh=False):
+    global _help_schedule_fetched_at, _help_schedule_items
+    if not NOT_IN_OPERATION_DYNAMIC_ENABLE:
+        return None
+    now = time.time()
+    try:
+        with _help_schedule_lock:
+            if (
+                not force_refresh
+                and _help_schedule_items is not None
+                and NOT_IN_OPERATION_SCHEDULE_TTL_SECONDS > 0
+                and now - _help_schedule_fetched_at < NOT_IN_OPERATION_SCHEDULE_TTL_SECONDS
+            ):
+                return list(_help_schedule_items)
+    except Exception:
+        pass
+    if elective is None:
+        return _help_schedule_items
+    try:
+        r = elective.get_HelpController()
+        items = _parse_help_schedule(getattr(r, "_tree", None), now_ts=now)
+        if items:
+            with _help_schedule_lock:
+                _help_schedule_items = list(items)
+                _help_schedule_fetched_at = now
+        return items or _help_schedule_items
+    except Exception as e:
+        ferr.error(e)
+        return _help_schedule_items
+
+
+def _find_next_operation_start(now_ts, schedule_items):
+    if not schedule_items:
+        return None
+    candidates = []
+    for it in schedule_items:
+        try:
+            name = it.get("name") or ""
+            start_ts = float(it.get("start_ts"))
+        except Exception:
+            continue
+        if start_ts <= now_ts:
+            continue
+        if "补退选" in name or "候补" in name or "补选" in name:
+            candidates.append(it)
+    if not candidates:
+        return None
+    return min(candidates, key=lambda x: x.get("start_ts", float("inf")))
+
+
+def _update_not_in_operation_backoff(elective=None):
+    """
+    Update dynamic backoff when we hit NotInOperationTimeError.
+    Only increases sleep to reduce useless traffic before operation begins.
+    """
+    global _not_in_operation_min_refresh_dynamic, _not_in_operation_backoff_reason
+    now = time.time()
+    mr = NOT_IN_OPERATION_MIN_REFRESH
+    cooldown = NOT_IN_OPERATION_COOLDOWN_SECONDS
+    reason = "static"
+
+    if NOT_IN_OPERATION_DYNAMIC_ENABLE:
+        sched = _get_help_schedule(elective=elective)
+        nxt = _find_next_operation_start(now, sched)
+        if nxt is not None:
+            start_ts = float(nxt["start_ts"])
+            delta = max(0.0, start_ts - now)
+            # Piecewise policy: far away -> long sleep; near -> keep base config.
+            if delta >= 24 * 3600:
+                computed = min(NOT_IN_OPERATION_DYNAMIC_LONG_SLEEP_MAX, 1800.0)
+            elif delta >= 6 * 3600:
+                computed = min(NOT_IN_OPERATION_DYNAMIC_LONG_SLEEP_MAX, 600.0)
+            elif delta >= 2 * 3600:
+                computed = 120.0
+            elif delta >= 30 * 60:
+                computed = 30.0
+            elif delta >= 5 * 60:
+                computed = 10.0
+            else:
+                computed = mr
+            mr = max(mr, computed)
+            cooldown = min(max(0.0, cooldown), mr)
+            try:
+                start_str = datetime.fromtimestamp(start_ts).strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                start_str = str(start_ts)
+            reason = "next=%s@%s, delta=%ss" % (nxt.get("name"), start_str, int(delta))
+
+    _not_in_operation_min_refresh_dynamic = mr
+    _not_in_operation_backoff_reason = reason
+    _stat_set_gauge("not_in_operation_min_refresh", mr)
+    if cooldown and cooldown > 0:
+        _enter_cooldown("not_in_operation", cooldown)
+    return mr, reason
+
+
+def _adaptive_persist_path_abs():
+    path = (CAPTCHA_ADAPTIVE_PERSIST_PATH or "").strip()
+    if not path:
+        return None
+    # Use cwd-relative path by default (repo root).
+    if os.path.isabs(path):
+        return path
+    return os.path.normpath(os.path.abspath(path))
+
+
+def _load_adaptive_snapshot_once():
+    global _adaptive_snapshot_loaded
+    if _adaptive_snapshot_loaded:
+        return False
+    _adaptive_snapshot_loaded = True
+    if not CAPTCHA_ADAPTIVE_PERSIST_ENABLE:
+        return False
+    path = _adaptive_persist_path_abs()
+    if not path:
+        return False
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            data = stdjson.load(fp)
+        snap = data.get("snapshot") if isinstance(data, dict) else None
+        if snap is None and isinstance(data, dict):
+            snap = data
+        ok = adaptive.load_snapshot(snap)
+        if ok:
+            _stat_inc("adaptive_persist_load")
+            cout.info("Adaptive snapshot loaded: %s" % path)
+        return ok
+    except FileNotFoundError:
+        return False
+    except Exception as e:
+        ferr.error(e)
+        return False
+
+
+def _maybe_persist_adaptive(force=False):
+    global _adaptive_persist_last_at
+    if not CAPTCHA_ADAPTIVE_PERSIST_ENABLE:
+        return False
+    interval = float(CAPTCHA_ADAPTIVE_PERSIST_INTERVAL_SECONDS or 0.0)
+    now = time.time()
+    if not force and interval > 0 and (now - _adaptive_persist_last_at) < interval:
+        return False
+    if not _adaptive_persist_lock.acquire(blocking=False):
+        return False
+    try:
+        if not force and interval > 0 and (now - _adaptive_persist_last_at) < interval:
+            return False
+        _adaptive_persist_last_at = now
+        snap = adaptive.snapshot()
+        payload = {"saved_at": now, "snapshot": snap}
+        path = _adaptive_persist_path_abs()
+        if not path:
+            return False
+        d = os.path.dirname(path)
+        if d:
+            mkdir(d)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fp:
+            stdjson.dump(payload, fp, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+        _stat_inc("adaptive_persist_write")
+        _stat_set_gauge("adaptive_persist_last_at", int(now))
+        return True
+    except Exception as e:
+        ferr.error(e)
+        return False
+    finally:
+        _adaptive_persist_lock.release()
 
 
 def _is_stale_client(client):
@@ -1126,7 +1426,35 @@ def _run_captcha_probe_loop(stop_event, pause_event):
                 probe_recognizers[provider] = recognizer
 
             t0 = time.time()
-            r = client.get_DrawServlet()
+            try:
+                r = client.get_DrawServlet()
+            except (
+                SessionExpiredError,
+                InvalidTokenError,
+                NoAuthInfoError,
+                SharedSessionError,
+                OperationTimeoutError,
+            ) as e:
+                ferr.error(e)
+                _add_error(e)
+                _record_auth_error("probe_auth")
+                _stat_inc("probe_auth_error")
+                _return_client(reloginPool, client, "reloginPool")
+                client = None
+                next_probe_at = time.time() + CAPTCHA_PROBE_BACKOFF
+                continue
+            except NotInOperationTimeError:
+                _stat_inc("probe_not_in_operation")
+                old_mr = _not_in_operation_min_refresh_dynamic
+                old_reason = _not_in_operation_backoff_reason
+                mr, reason = _update_not_in_operation_backoff(elective=client)
+                if reason != old_reason or mr != old_mr:
+                    cout.warning(
+                        "Not in operation time (probe): min_refresh=%ss (%s)"
+                        % (int(mr), reason)
+                    )
+                next_probe_at = time.time() + max(CAPTCHA_PROBE_BACKOFF, mr)
+                continue
             draw_dt = time.time() - t0
             _maybe_sample_captcha(r.content, provider=provider, context="probe", draw_dt=draw_dt)
 
@@ -1297,6 +1625,12 @@ def run_iaaa_loop():
             )
             cout.info("")
 
+            if WARMUP_AFTER_LOGIN_ENABLE:
+                try:
+                    _get_help_schedule(elective=elective, force_refresh=True)
+                except Exception as e:
+                    ferr.error(e)
+
             _return_client_home(elective)
             elective = None
             iaaa_error = False
@@ -1408,8 +1742,11 @@ def run_iaaa_loop():
 
 def run_elective_loop():
     global _elective_consecutive_errors, _not_in_operation_streak, _last_not_in_operation_at
+    global _not_in_operation_min_refresh_dynamic, _not_in_operation_backoff_reason
     elective = None
     noWait = False
+
+    _load_adaptive_snapshot_once()
 
     ## load courses
 
@@ -1944,15 +2281,15 @@ def run_elective_loop():
 
                 except QuotaLimitedError as e:
                     ferr.error(e)
-                    # 选课网可能会发回异常数据，本身名额 180/180 的课会发 180/0，这个时候选课会得到这个错误
+                    _stat_inc("elect_quota_limited")
+                    # Normal in competition: seats may be gone after refresh. Do NOT treat as critical,
+                    # and do not poison global error counters.
                     if course.used_quota == 0:
                         cout.warning(
-                            "Abnormal status of %s, a bug of 'elective.pku.edu.cn' found"
-                            % course
+                            "QuotaLimited but used_quota==0 (possible elective bug/race): %s" % course
                         )
                     else:
-                        ferr.critical("Unexcepted behaviour")  # 没有理由运行到这里
-                        _add_error(e)
+                        cout.info("QuotaLimited (competition): %s" % course)
 
                 except ElectionSuccess as e:
                     # 不从此处加入 ignored，而是在下回合根据教学网返回的实际选课结果来决定是否忽略
@@ -1996,7 +2333,15 @@ def run_elective_loop():
                     )
                     continue
 
+                except (RequestException, AutoElectiveException) as e:
+                    # Let outer loop classify and recover (offline/auth/html/etc).
+                    raise e
+
+                except KeyboardInterrupt as e:
+                    raise e
+
                 except Exception as e:
+                    # Unknown per-course failure: keep running but don't poison global counters.
                     ferr.exception(e)
                     continue  # don't increase error count here
 
@@ -2083,16 +2428,23 @@ def run_elective_loop():
                 "Critical: caught cheating. Cooldown %ss" % int(CRITICAL_COOLDOWN_SECONDS),
             )
 
+        except NotInOperationTimeError as e:
+            # Not in supplement operation time: not a failure, just backoff.
+            not_in_operation = True
+            old_mr = _not_in_operation_min_refresh_dynamic
+            old_reason = _not_in_operation_backoff_reason
+            mr, reason = _update_not_in_operation_backoff(elective=elective)
+            if reason != old_reason or mr != old_mr:
+                cout.warning(
+                    "Not in operation time: min_refresh=%ss (%s)" % (int(mr), reason)
+                )
+
         except SystemException as e:
             ferr.error(e)
             cout.warning("SystemException encountered")
             _add_error(e)
             loop_error = True
             loop_error_reason = e.__class__.__name__
-            if isinstance(e, NotInOperationTimeError):
-                not_in_operation = True
-                if NOT_IN_OPERATION_COOLDOWN_SECONDS > 0:
-                    _enter_cooldown("not_in_operation", NOT_IN_OPERATION_COOLDOWN_SECONDS)
             _maybe_failure_notify(
                 _elective_consecutive_errors,
                 "SystemException x%d (cooldown %ss)" % (
@@ -2101,26 +2453,23 @@ def run_elective_loop():
                 ),
             )
 
+        except OperationTimeoutError as e:
+            # The system is explicitly asking us to relogin.
+            ferr.error(e)
+            _add_error(e)
+            _record_auth_error("operation_timeout")
+            auth_error = True
+            cout.warning("OperationTimeoutError encountered (need relogin)")
+            if elective is not None:
+                cout.info("client: %s needs relogin" % elective.id)
+                _return_client(reloginPool, elective, "reloginPool")
+                elective = None
+                noWait = True
+
         except TipsException as e:
             ferr.error(e)
             cout.warning("TipsException encountered")
             _add_error(e)
-
-        except OperationTimeoutError as e:
-            ferr.error(e)
-            cout.warning("OperationTimeoutError encountered")
-            _add_error(e)
-            loop_error = True
-            loop_error_reason = e.__class__.__name__
-            network_error = True
-            _record_network_error_detail("elective_timeout", e)
-            _maybe_failure_notify(
-                _elective_consecutive_errors,
-                "OperationTimeout x%d (cooldown %ss)" % (
-                    _elective_consecutive_errors,
-                    int(FAILURE_COOLDOWN_SECONDS),
-                ),
-            )
 
         except json.JSONDecodeError as e:
             ferr.error(e)
@@ -2179,11 +2528,17 @@ def run_elective_loop():
                 if _not_in_operation_streak != 0:
                     _not_in_operation_streak = 0
                     _stat_set_gauge("not_in_operation_streak", 0)
+                if _not_in_operation_min_refresh_dynamic != NOT_IN_OPERATION_MIN_REFRESH:
+                    _not_in_operation_min_refresh_dynamic = NOT_IN_OPERATION_MIN_REFRESH
+                    _not_in_operation_backoff_reason = ""
+                    _stat_set_gauge("not_in_operation_min_refresh", NOT_IN_OPERATION_MIN_REFRESH)
 
             if auth_error:
                 pass
             else:
                 _record_auth_success()
+
+            _maybe_persist_adaptive()
 
             if noWait:
                 cout.info("")

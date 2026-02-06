@@ -40,7 +40,18 @@ class Phase1FixturesOptionalOfflineTest(unittest.TestCase):
         for col in ("课程名", "班号", "开课单位"):
             self.assertIn(col, header)
 
+    def test_supplement_p2_fixture_optional(self):
+        path = _fixture_path("2026_phase1", "supplement_p2.html")
+        if not os.path.isfile(path):
+            raise unittest.SkipTest("missing fixture: %s" % path)
+        raw = self._load(path)
+        tree = get_tree(raw)
+        tables = get_tables(tree)
+        self.assertGreaterEqual(len(tables), 1)
+        header = get_table_header(tables[0])
+        for col in ("课程名", "班号", "开课单位"):
+            self.assertIn(col, header)
+
 
 if __name__ == "__main__":
     unittest.main()
-

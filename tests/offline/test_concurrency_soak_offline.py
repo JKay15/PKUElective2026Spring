@@ -71,6 +71,8 @@ class _DummyClient:
 
 class ConcurrencySoakOfflineTest(unittest.TestCase):
     def test_soak_concurrency(self):
+        if not os.getenv("AUTOELECTIVE_HEAVY_TESTS"):
+            raise unittest.SkipTest("heavy test disabled (set AUTOELECTIVE_HEAVY_TESTS=1)")
         duration = float(os.getenv("SOAK_SECONDS", "300"))
         sample_interval = float(os.getenv("SOAK_SAMPLE_INTERVAL", "0.05"))
         reset_interval = float(os.getenv("SOAK_RESET_INTERVAL", "0.2"))

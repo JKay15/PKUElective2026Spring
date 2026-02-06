@@ -17,13 +17,43 @@ def get_tree_from_response(r):
     return etree.HTML(r.text) # 不要用 r.content, 否则可能会以 latin-1 编码
 
 def get_tree(content):
+    # Fixtures/tests may pass bytes without a <meta charset=...>. lxml then tends
+    # to treat it as latin-1 and produces garbled Chinese. Prefer decoding as
+    # UTF-8, with GB18030 as a fallback.
+    if isinstance(content, (bytes, bytearray)):
+        try:
+            content = content.decode("utf-8")
+        except Exception:
+            try:
+                content = content.decode("gb18030")
+            except Exception:
+                content = content.decode("utf-8", errors="ignore")
     return etree.HTML(content)
 
 def get_tables(tree):
     return tree.xpath('.//table//table[@class="datagrid"]')
 
 def get_table_header(table):
-    return table.xpath('.//tr[@class="datagrid-header"]/th/text()')
+    # Be tolerant to formatting changes:
+    # - <th><span>课程名</span></th>
+    # - extra whitespace/newlines
+    # - <br/> inside header cells
+    try:
+        ths = table.xpath('.//tr[@class="datagrid-header"]/th')
+    except Exception:
+        ths = []
+    out = []
+    for th in ths:
+        try:
+            texts = th.xpath(".//text()")
+        except Exception:
+            continue
+        if not texts:
+            continue
+        s = "".join(t.strip() for t in texts if t and t.strip()).strip()
+        if s:
+            out.append(s)
+    return out
 
 def get_table_trs(table):
     return table.xpath('.//tr[@class="datagrid-odd" or @class="datagrid-even"]')

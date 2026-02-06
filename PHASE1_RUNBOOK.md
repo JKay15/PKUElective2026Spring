@@ -80,6 +80,30 @@ $PY scripts/capture_live_fixtures.py -c "$CFG" --sanitize --help-only --sleep 1.
 1. 打开 `cache/live_fixtures/sanitized/*helpcontroller*.html`，确认 datagrid 结构和列名是否变化。
 2. 打开 `cache/live_fixtures/sanitized/*supplycancel*.html`，确认 `datagrid` 表头是否仍含 `课程名/班号/开课单位/限数/已选/补选` 这些列（顺序可以变，但名字最好别变）。
 
+## Step 1.1：Fixture 覆盖清单（必须项 + 风险点）
+
+建议至少准备以下 fixture（优先级从高到低）：
+
+1. `helpcontroller.html`（时间表 datagrid）
+- 风险点：列名/顺序/分页结构变动导致 `not-in-operation` 误判或退避策略异常。
+- 对应测试：`tests/offline/test_phase1_fixtures_optional_offline.py::test_helpcontroller_fixture_optional`
+
+2. `supplycancel.html`（补选列表首页）
+- 风险点：表头变动、缺列、`onclick/href` 结构改变导致选课链接解析失败。
+- 对应测试：
+  - `tests/offline/test_phase1_fixtures_optional_offline.py::test_supplycancel_fixture_optional`
+  - `tests/offline/test_parser_supplycancel_onclick_fallback_offline.py`
+
+3. `supplement_p2.html`（补选列表非首页）
+- 风险点：分页结构/参数变动导致 `get_supplement` 只能抓第一页。
+- 对应测试：`tests/offline/test_supplement_page_retry_offline.py`
+
+4. `electSupplement` 返回页（真实提交返回 HTML）
+- 风险点：`tips/系统提示文本`变动导致失败原因分类/重试策略错误。
+- 对应测试：`tests/offline/test_supply_cancel_safe_parse_success_offline.py` 等竞态/重试用例
+
+抓取后，先用 `promote_live_fixtures.py` 提升，再跑 `python -m unittest -q`，确认解析路径没有被新 HTML 打爆。
+
 ## Step 2：线上验证码真实评估（Draw + 识别 + Validate）
 
 用途：不用“人工标注 ground truth”，直接用服务器 `Validate()` 作为判定（通过=识别正确）。这比合成验证码更接近真实。

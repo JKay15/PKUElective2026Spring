@@ -129,7 +129,12 @@ def _save_one(
 
 def main():
     parser = argparse.ArgumentParser(description="Capture live PKU elective fixtures (raw + sanitized).")
-    parser.add_argument("-c", "--config", default=None, help="config.ini path (optional)")
+    parser.add_argument(
+        "-c",
+        "--config",
+        default=None,
+        help="config.ini path (optional). If set, overrides AUTOELECTIVE_CONFIG_INI for this process.",
+    )
     parser.add_argument("--out", default="cache/live_fixtures", help="output directory (default: cache/live_fixtures)")
     parser.add_argument("--sanitize", action="store_true", help="also write sanitized fixtures")
     parser.add_argument("--sleep", type=float, default=1.0, help="sleep seconds between requests")

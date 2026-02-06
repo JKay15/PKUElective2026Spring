@@ -149,6 +149,36 @@ rg -n -P "sida=(?!SIDA)[0-9a-fA-F]{32}|token=(?!TOKEN)\\S+|\\bxh=\\d{6,}" tests/
 $PY -m unittest -q
 ```
 
+## Step 6（可选）：列出 electSupplement 链接（不提交，只用于观察）
+
+用途：从你刚抓的 `supplycancel` fixture 里解析出 `electSupplement` 的 href，**默认只打印**，不发任何选课请求。
+
+```bash
+$PY scripts/list_electsupplement_hrefs.py \
+  --fixture tests/fixtures/2026_phase1/supplycancel.html \
+  --limit 10
+```
+
+如果你 **明确确认允许触发 electSupplement**（可能会提交选课），需要显式加双重确认：
+
+```bash
+$PY scripts/list_electsupplement_hrefs.py \
+  --fixture tests/fixtures/2026_phase1/supplycancel.html \
+  --config "$CFG" \
+  --fetch \
+  --confirm-elect \
+  --limit 1 \
+  --sleep 1.0
+```
+
+## Step 7（可选）：Bark 通知自检
+
+```bash
+$PY scripts/test_bark_notify.py -c "$CFG"
+```
+
+预期：手机收到 `[测试] This is a test.`，终端无异常。若没有收到，检查 `config.phase1.ini` 的 `[notification] token`。
+
 ## 可选：观测 OFFLINE/探针/观测期（谨慎）
 
 如果你想观察 `OFFLINE 冷却态 -> 探测失败 -> 探测成功 -> 观测期 -> 恢复` 的日志走势：
@@ -199,3 +229,7 @@ $PY main.py -c "$CFG"
 5. promoted fixture 里仍出现真实 `xh=学号` 或 32 位 `sida`
 - 含义：脱敏规则遗漏或页面包含新的字段。
 - 处理：不要提交；把命中的片段贴出来（只贴 sanitized 文件片段），我们补脱敏规则/或改 capture 脚本再抓一次。
+
+6. `list_electsupplement_hrefs.py --fetch` 报错或卡住
+- 含义：`electSupplement` 本质上是选课提交，可能被服务端拒绝或不在操作阶段。
+- 处理：优先只做“打印链接”，不要 fetch；确需 fetch 时务必在抽签期低频验证，并严格 `--limit 1`。

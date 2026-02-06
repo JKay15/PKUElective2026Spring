@@ -88,7 +88,12 @@ def _login(cfg):
 
 def main():
     parser = argparse.ArgumentParser(description="Online captcha accuracy benchmark via Validate().")
-    parser.add_argument("-c", "--config", default=None, help="config.ini path (optional)")
+    parser.add_argument(
+        "-c",
+        "--config",
+        default=None,
+        help="config.ini path (optional). If set, overrides AUTOELECTIVE_CONFIG_INI for this process.",
+    )
     parser.add_argument(
         "--providers",
         default=None,
@@ -203,4 +208,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

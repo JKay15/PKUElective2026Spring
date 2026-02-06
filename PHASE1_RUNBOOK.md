@@ -149,6 +149,20 @@ rg -n -P "sida=(?!SIDA)[0-9a-fA-F]{32}|token=(?!TOKEN)\\S+|\\bxh=\\d{6,}" tests/
 $PY -m unittest -q
 ```
 
+## 可选：一键完成“抓取 + 提升 + 脱敏扫描 + 回归”
+
+如果你希望一条命令跑完核心流程（含两次 unittest），可以用：
+
+```bash
+$PY scripts/phase1_capture_replay.py -c "$CFG" --pages 3 --draw-count 5 --sleep 1.0 --strict
+```
+
+说明：
+- 默认会跑两次 `unittest`（前后各一次）。
+- 会自动对 `tests/fixtures/2026_phase1` 做脱敏扫描，发现疑似 token 会直接报错退出。
+- 如需覆盖旧 fixture，加 `--force`。
+- 如需跳过 unittest，加 `--skip-unittest`（不推荐）。
+
 ## Step 6（可选）：列出 electSupplement 链接（不提交，只用于观察）
 
 用途：从你刚抓的 `supplycancel` fixture 里解析出 `electSupplement` 的 href，**默认只打印**，不发任何选课请求。

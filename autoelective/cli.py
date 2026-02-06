@@ -6,6 +6,7 @@
 from optparse import OptionParser
 from threading import Thread
 import time
+import os
 from multiprocessing import Queue
 from . import __version__, __date__
 
@@ -36,6 +37,14 @@ def create_default_parser():
         action='store_true',
         default=False,
         help='run the monitor thread simultaneously',
+    )
+
+    parser.add_option(
+        '--preflight',
+        dest='preflight',
+        action='store_true',
+        default=False,
+        help='run static config preflight checks before starting loops (no network)',
     )
 
     return parser
@@ -83,6 +92,40 @@ def run():
     options, args = parser.parse_args()
 
     setup_default_environ(options, args, environ)
+
+    preflight_env = (os.getenv("AUTOELECTIVE_PREFLIGHT") or "").strip().lower()
+    enable_preflight = bool(options.preflight) or (preflight_env in {"1", "true", "yes", "on"})
+    if enable_preflight:
+        from autoelective.config import AutoElectiveConfig
+        from autoelective.preflight import run_preflight
+        from autoelective.utils import Singleton
+
+        # Ensure config path from -c is honored (avoid stale singleton instances).
+        Singleton._inst.pop(AutoElectiveConfig, None)
+        try:
+            cfg = AutoElectiveConfig()
+        except Exception as e:
+            cout.error("Preflight: failed to load config: %s" % e)
+            raise SystemExit(2)
+
+        issues = run_preflight(cfg)
+        errors = [i for i in issues if i.level == "ERROR"]
+        warns = [i for i in issues if i.level == "WARN"]
+
+        cout.info("=== Preflight (static) ===")
+        cout.info("captcha.provider: %s" % (getattr(cfg, "captcha_provider", None) or "(empty)"))
+        if errors:
+            cout.error("Preflight ERRORS (%d):" % len(errors))
+            for i in errors:
+                kp = i.key_path or "-"
+                cout.error(" - %s %s [%s] %s" % (i.level, i.code, kp, i.message))
+        if warns:
+            cout.warning("Preflight WARNINGS (%d):" % len(warns))
+            for i in warns:
+                kp = i.key_path or "-"
+                cout.warning(" - %s %s [%s] %s" % (i.level, i.code, kp, i.message))
+        if errors:
+            raise SystemExit(2)
 
     # Import modules that instantiate AutoElectiveConfig only after config path is set.
     # Otherwise `main.py -c xxx.ini` would be ignored due to early singleton init.

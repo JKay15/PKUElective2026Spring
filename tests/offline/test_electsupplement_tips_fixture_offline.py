@@ -11,6 +11,11 @@ from autoelective.exceptions import (
     ElectionFailedError,
     QuotaLimitedError,
     CaptchaError,
+    InvalidTokenError,
+    SessionExpiredError,
+    NotInOperationTimeError,
+    SharedSessionError,
+    SystemException,
 )
 
 
@@ -40,32 +45,46 @@ class ElectSupplementTipsFixtureOfflineTest(unittest.TestCase):
         with open(path, "r", encoding="utf-8") as fp:
             return fp.read()
 
-    def _assert_tips(self, html, exc_type):
+    def _assert_exc(self, name, exc_type):
+        html = self._load(name)
         r = FakeResponse(text=html)
         with_etree(r)
-        # Should not raise on title if msgTips exists.
-        check_elective_title(r)
+        try:
+            check_elective_title(r)
+        except exc_type:
+            return
         with self.assertRaises(exc_type):
             check_elective_tips(r)
 
     def test_quota_limit_fixture(self):
-        html = self._load("electsupplement_tips_quota.html")
-        self._assert_tips(html, QuotaLimitedError)
+        self._assert_exc("electsupplement_tips_quota.html", QuotaLimitedError)
 
     def test_timeout_fixture(self):
-        html = self._load("electsupplement_tips_timeout.html")
-        self._assert_tips(html, OperationTimeoutError)
+        self._assert_exc("electsupplement_tips_timeout.html", OperationTimeoutError)
 
     def test_div_fixture(self):
-        html = self._load("electsupplement_tips_div.html")
-        self._assert_tips(html, ElectionFailedError)
+        self._assert_exc("electsupplement_tips_div.html", ElectionFailedError)
 
     def test_system_prompt_fixture(self):
-        html = self._load("electsupplement_system_prompt.html")
-        r = FakeResponse(text=html)
-        with_etree(r)
-        with self.assertRaises(CaptchaError):
-            check_elective_title(r)
+        self._assert_exc("electsupplement_system_prompt.html", CaptchaError)
+
+    def test_system_prompt_msgtips_not_in_operation(self):
+        self._assert_exc("electsupplement_system_prompt_msgtips_not_in_operation.html", NotInOperationTimeError)
+
+    def test_system_prompt_msgtips_token_invalid(self):
+        self._assert_exc("electsupplement_system_prompt_msgtips_token_invalid.html", InvalidTokenError)
+
+    def test_system_prompt_msgtips_session_expired(self):
+        self._assert_exc("electsupplement_system_prompt_msgtips_session_expired.html", SessionExpiredError)
+
+    def test_system_prompt_msgtips_shared_session(self):
+        self._assert_exc("electsupplement_system_prompt_msgtips_shared_session.html", SharedSessionError)
+
+    def test_system_prompt_msgtips_quota(self):
+        self._assert_exc("electsupplement_system_prompt_msgtips_quota.html", QuotaLimitedError)
+
+    def test_system_prompt_msgtips_unknown_fail_fast(self):
+        self._assert_exc("electsupplement_system_prompt_msgtips_unknown.html", SystemException)
 
 
 if __name__ == "__main__":

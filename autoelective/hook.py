@@ -122,14 +122,13 @@ def check_elective_title(r, **kwargs):
                 raise NotInOperationTimeError(response=r, msg=err)
 
             else:
-                # If errInfo is empty but msgTips exists, let check_elective_tips handle it.
+                # Some "系统提示" pages put the message into msgTips (and errInfo becomes empty).
+                # In that case, try to classify via `check_elective_tips` (which also handles
+                # system-like messages in msgTips). If still unknown, fail fast as SystemException.
                 if not err:
-                    try:
-                        tips = get_tips(r._tree)
-                    except Exception:
-                        tips = None
-                    if tips:
-                        return
+                    check_elective_tips(r)
+                    tips = get_tips(r._tree) or ""
+                    raise SystemException(response=r, msg=(tips.strip() or err))
                 raise SystemException(response=r, msg=err)
 
     except Exception as e:
@@ -198,6 +197,29 @@ def check_elective_tips(r, **kwargs):
         if tips is None:
             return
         tips = tips.strip()
+
+        # Some pages (especially "系统提示") may put the error message into msgTips
+        # instead of the errInfo area. Map those system-like strings here too.
+        if tips == "token无效":
+            raise InvalidTokenError(response=r)
+        elif tips == "您尚未登录或者会话超时,请重新登录.":
+            raise SessionExpiredError(response=r)
+        elif tips == "请不要用刷课机刷课，否则会受到学校严厉处分！":
+            raise CaughtCheatingError(response=r)
+        elif tips == "索引错误。":
+            raise CourseIndexError(response=r)
+        elif tips == "验证码不正确。":
+            raise CaptchaError(response=r)
+        elif tips == "无验证信息。":
+            raise NoAuthInfoError(response=r)
+        elif tips == "你与他人共享了回话，请退出浏览器重新登录。":
+            raise SharedSessionError(response=r)
+        elif tips == "只有同意选课协议才可以继续选课！":
+            raise NotAgreedToSelectionAgreement(response=r)
+        elif _regexErrorOperatingTime.search(tips):
+            raise NotInOperationTimeError(response=r, msg=tips)
+        elif tips.startswith("目前不是") and ("阶段" in tips or "时间" in tips):
+            raise NotInOperationTimeError(response=r, msg=tips)
 
         if tips == "您已经选过该课程了。":
             raise ElectionRepeatedError(response=r)

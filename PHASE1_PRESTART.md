@@ -97,9 +97,25 @@ $PY scripts/audit_baseline_antiban.py --baseline ee5ab5c
 AUTOELECTIVE_HEAVY_TESTS=1 SOAK_SECONDS=180 $PY -m unittest -q
 ```
 
+如果你只想跑其中一套（避免每次都跑满），用 `AUTOELECTIVE_HEAVY_SUITE` 精确选择：
+
+```bash
+AUTOELECTIVE_HEAVY_TESTS=1 AUTOELECTIVE_HEAVY_SUITE=concurrency SOAK_SECONDS=180 $PY -m unittest -q
+AUTOELECTIVE_HEAVY_TESTS=1 AUTOELECTIVE_HEAVY_SUITE=fault_probe_reset SOAK_SECONDS=180 $PY -m unittest -q
+```
+
 预期：仍然 `OK`。如果出现 flake，要先修被测代码或降低并发窗口的随机性，不要“改测试迎合实现”。
 
 ## Step 6：线上只读“真实测试”（不跑主循环）
+
+### 6.0 只读 rehearsal（推荐，最小流量）
+
+默认只会：登录 + 抓 `HelpController`，不触发 `electSupplement`，且把输出写入 `cache/rehearsal/`。
+
+```bash
+$PY scripts/rehearsal_readonly.py -c "$CFG"
+echo "exit=$?"
+```
 
 ### 6.1 抓真实 HTML fixture（脱敏）
 
@@ -150,4 +166,3 @@ git status --porcelain
 ```
 
 预期：不出现 `config.ini/config.phase1.ini/apikey.json/cache/` 之类敏感或本地文件的 staged 变更。
-

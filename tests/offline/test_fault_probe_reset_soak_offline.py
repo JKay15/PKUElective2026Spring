@@ -99,6 +99,12 @@ class FaultProbeResetSoakOfflineTest(unittest.TestCase):
     def test_fault_probe_reset_soak(self):
         if not os.getenv("AUTOELECTIVE_HEAVY_TESTS"):
             raise unittest.SkipTest("heavy test disabled (set AUTOELECTIVE_HEAVY_TESTS=1)")
+        suite = (os.getenv("AUTOELECTIVE_HEAVY_SUITE") or "all").strip().lower()
+        allowed = {"all", "concurrency", "fault_probe_reset"}
+        if suite not in allowed:
+            raise RuntimeError(f"Unknown AUTOELECTIVE_HEAVY_SUITE={suite!r} (allowed: {sorted(allowed)})")
+        if suite not in {"all", "fault_probe_reset"}:
+            raise unittest.SkipTest("heavy suite mismatch (set AUTOELECTIVE_HEAVY_SUITE=fault_probe_reset)")
         duration = float(os.getenv("SOAK_SECONDS", "180"))
         sample_interval = float(os.getenv("SOAK_SAMPLE_INTERVAL", "0.05"))
         reset_interval = float(os.getenv("SOAK_RESET_INTERVAL", "0.2"))

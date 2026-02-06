@@ -73,6 +73,12 @@ class ConcurrencySoakOfflineTest(unittest.TestCase):
     def test_soak_concurrency(self):
         if not os.getenv("AUTOELECTIVE_HEAVY_TESTS"):
             raise unittest.SkipTest("heavy test disabled (set AUTOELECTIVE_HEAVY_TESTS=1)")
+        suite = (os.getenv("AUTOELECTIVE_HEAVY_SUITE") or "all").strip().lower()
+        allowed = {"all", "concurrency", "fault_probe_reset"}
+        if suite not in allowed:
+            raise RuntimeError(f"Unknown AUTOELECTIVE_HEAVY_SUITE={suite!r} (allowed: {sorted(allowed)})")
+        if suite not in {"all", "concurrency"}:
+            raise unittest.SkipTest("heavy suite mismatch (set AUTOELECTIVE_HEAVY_SUITE=concurrency)")
         duration = float(os.getenv("SOAK_SECONDS", "300"))
         sample_interval = float(os.getenv("SOAK_SAMPLE_INTERVAL", "0.05"))
         reset_interval = float(os.getenv("SOAK_RESET_INTERVAL", "0.2"))

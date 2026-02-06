@@ -101,6 +101,8 @@ $PY scripts/capture_live_fixtures.py -c "$CFG" --sanitize --help-only --sleep 1.
 4. `electSupplement` 返回页（真实提交返回 HTML）
 - 风险点：`tips/系统提示文本`变动导致失败原因分类/重试策略错误。
 - 对应测试：`tests/offline/test_supply_cancel_safe_parse_success_offline.py` 等竞态/重试用例
+ - 建议 fixture（示例）：`electsupplement_tips_quota.html` / `electsupplement_tips_failed.html` / `electsupplement_tips_timeout.html` / `electsupplement_tips_mutex.html` / `electsupplement_tips_success.html`
+ - 对应测试：`tests/offline/test_phase1_electsupplement_tips_offline.py`
 
 抓取后，先用 `promote_live_fixtures.py` 提升，再跑 `python -m unittest -q`，确认解析路径没有被新 HTML 打爆。
 

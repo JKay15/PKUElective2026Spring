@@ -102,7 +102,8 @@ def get_errInfo(tree):
     return ""
 
 def get_tips(tree):
-    tips = tree.xpath('.//td[@id="msgTips"]')
+    # Be tolerant to HTML changes: msgTips may be on td/div/span.
+    tips = tree.xpath('.//*[@id="msgTips"]')
     if len(tips) == 0:
         return None
     node = tips[0]

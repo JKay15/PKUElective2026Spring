@@ -122,6 +122,14 @@ def check_elective_title(r, **kwargs):
                 raise NotInOperationTimeError(response=r, msg=err)
 
             else:
+                # If errInfo is empty but msgTips exists, let check_elective_tips handle it.
+                if not err:
+                    try:
+                        tips = get_tips(r._tree)
+                    except Exception:
+                        tips = None
+                    if tips:
+                        return
                 raise SystemException(response=r, msg=err)
 
     except Exception as e:

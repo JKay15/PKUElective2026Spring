@@ -32,12 +32,16 @@ def _run(cmd, env=None) -> int:
 
 
 def _scan_redaction(dst: Path) -> int:
-    patterns = [
-        re.compile(r"sida=(?!SIDA)[0-9a-fA-F]{32}"),
-        re.compile(r"token=(?!TOKEN)\\S+"),
-        re.compile(r"\\bxh=\\d{6,}"),
-    ]
-    leaked = []
+    # Keep this scan aligned with tests/offline/test_fixture_secret_scan_offline.py to avoid
+    # false positives on placeholders like token=TOKEN / token=REDACTED.
+    rx = {
+        "sida": re.compile(r"(?i)\\bsida=([0-9a-f]{32})\\b"),
+        "token": re.compile(r"(?i)\\btoken=([A-Za-z0-9][^\\s&\\\"']{7,})\\b"),
+        "xh": re.compile(r"(?i)\\bxh=(\\d{6,})\\b"),
+        "jsessionid": re.compile(r"(?i)\\bJSESSIONID=([^\\s;\\\"']+)\\b"),
+    }
+    allow = {"SIDA", "TOKEN", "REDACTED", "STUDENT_ID", "JSESSIONID", "PHPSESSID"}
+    leaked: list[tuple[Path, str]] = []
     for path in dst.rglob("*"):
         if not path.is_file():
             continue
@@ -45,14 +49,19 @@ def _scan_redaction(dst: Path) -> int:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
             continue
-        for pat in patterns:
-            if pat.search(text):
-                leaked.append(path)
-                break
+        for kind, pat in rx.items():
+            m = pat.search(text)
+            if not m:
+                continue
+            val = m.group(1)
+            if val in allow:
+                continue
+            leaked.append((path, kind))
+            break
     if leaked:
         print("[ERROR] Potential sensitive tokens detected in promoted fixtures:")
-        for p in leaked:
-            print(" -", p)
+        for p, kind in leaked:
+            print(f" - {p} kind={kind}")
         return 3
     return 0
 
@@ -92,6 +101,11 @@ def main(argv=None) -> int:
     py = sys.executable
     env = os.environ.copy()
     env["AUTOELECTIVE_CONFIG_INI"] = str(cfg)
+
+    # Preflight (static validation): fail fast on ERRORs to avoid unsafe runs.
+    rc = _run([py, str(repo_root / "scripts" / "preflight_config.py"), "-c", str(cfg)], env=env)
+    if rc != 0:
+        return rc
 
     if not args.skip_unittest:
         rc = _run([py, "-m", "unittest", "-q"], env=env)

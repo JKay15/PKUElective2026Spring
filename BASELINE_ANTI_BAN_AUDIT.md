@@ -32,7 +32,7 @@ Default outputs:
 - Baseline default headers on both IAAA and Elective clients
 - SupplyCancel referer: `HelpController`
 - Action endpoints referer: `SupplyCancel`
-- SSO login carries dummy `JSESSIONID=<52 chars>!<digits>` cookie (avoid 101)
+- SSO login carries a dummy Cookie `JSESSIONID=JSESSIONID` (placeholder; runtime shape is `<52 chars>!<digits>`, avoids 101)
 - Random query parameters to reduce cache and match browser behavior (`_rand`, `Rand`)
 
 ### 2.2 频率与请求足迹类（refresh / jitter / endpoint budget / pool）

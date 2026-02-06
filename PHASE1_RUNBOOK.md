@@ -51,6 +51,17 @@ cp config.sample.ini "$CFG"
 $PY -c "from autoelective.config import AutoElectiveConfig as C; c=C(); print('student_id=', c.iaaa_id, 'provider=', c.captcha_provider)"
 ```
 
+配置预检（必跑，纯静态检查；不联网、不实例化 OCR）：
+
+```bash
+$PY scripts/preflight_config.py -c "$CFG"
+echo "exit=$?"
+```
+
+预期：
+- `exit=0`：通过（可能会打印 WARN，但默认不阻塞）
+- `exit=2`：有 ERROR，先修配置再继续
+
 ## Step 0.5：全量离线回归（先确保本地没坏）
 
 ```bash
@@ -166,7 +177,7 @@ $PY scripts/promote_live_fixtures.py --src cache/live_fixtures/sanitized --dst t
 推荐用 `rg -P` 做一次快速扫描（有命中就先别提交）：
 
 ```bash
-rg -n -P "sida=(?!SIDA)[0-9a-fA-F]{32}|token=(?!TOKEN)\\S+|\\bxh=\\d{6,}" tests/fixtures/2026_phase1 || true
+rg -n -P "(?i)\\bsida=[0-9a-f]{32}\\b|(?i)\\btoken=(?!(?:TOKEN|REDACTED)\\b)[A-Za-z0-9][^\\s&\\\"']{7,}\\b|(?i)\\bxh=\\d{6,}\\b" tests/fixtures/2026_phase1 || true
 ```
 
 ## Step 5：再跑一次全量离线回归（确认 fixture 没把解析搞炸）

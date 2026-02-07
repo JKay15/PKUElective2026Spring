@@ -3,11 +3,11 @@
 
 """
 Static audit tool: compare baseline commit vs current workspace to extract
-"anti-ban / stability relevant" behaviors and highlight deltas/conflicts.
+"request-footprint / stability relevant" behaviors and highlight deltas/conflicts.
 
 Outputs:
-- JSON report (default: cache/audit/baseline_antiban_audit.json)
-- Markdown summary to stdout (for pasting into BASELINE_ANTI_BAN_AUDIT.md)
+- JSON report (default: cache/audit/baseline_footprint_audit.json)
+- Markdown summary to stdout (for pasting into BASELINE_FOOTPRINT_AUDIT.md)
 
 This script is intentionally dependency-free (stdlib only).
 """
@@ -25,8 +25,8 @@ from typing import Dict, List, Optional, Tuple
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_BASELINE = "baseline-antiban"
-DEFAULT_OUT = os.path.join(REPO_ROOT, "cache", "audit", "baseline_antiban_audit.json")
+DEFAULT_BASELINE = "baseline-footprint"
+DEFAULT_OUT = os.path.join(REPO_ROOT, "cache", "audit", "baseline_footprint_audit.json")
 
 
 def _run_git(args: List[str]) -> str:
@@ -396,7 +396,7 @@ def _diff_sets(a: List[str], b: List[str]) -> dict:
 
 def _render_markdown(items: List[dict], fp_base: dict, fp_cur: dict, baseline_commit: str) -> str:
     lines = []
-    lines.append("# Baseline Anti-Ban Audit Summary")
+    lines.append("# Baseline Request Footprint / Stability Audit Summary")
     lines.append("")
     lines.append("- baseline_commit: `%s`" % baseline_commit)
     lines.append("- generated_at_utc: `%s`" % time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
@@ -478,9 +478,19 @@ def generate_audit(baseline_commit: str) -> dict:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Audit baseline anti-ban/stability behaviors vs current workspace")
-    parser.add_argument("--baseline", default=DEFAULT_BASELINE, help="baseline git commit/tag (default: baseline-antiban)")
-    parser.add_argument("--out", default=DEFAULT_OUT, help="output json path (default: cache/audit/baseline_antiban_audit.json)")
+    parser = argparse.ArgumentParser(
+        description="Audit baseline request-footprint/stability behaviors vs current workspace"
+    )
+    parser.add_argument(
+        "--baseline",
+        default=DEFAULT_BASELINE,
+        help="baseline git commit/tag (default: baseline-footprint)",
+    )
+    parser.add_argument(
+        "--out",
+        default=DEFAULT_OUT,
+        help="output json path (default: cache/audit/baseline_footprint_audit.json)",
+    )
     args = parser.parse_args(argv)
 
     report = generate_audit(args.baseline)

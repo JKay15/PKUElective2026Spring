@@ -13,7 +13,7 @@
 - **验证码多模型链路管理（核心亮点）**：支持 `provider + fallback_providers` 组成识别链；失败自动 degrade 冷却并可切换识别器；可选 adaptive 自适应排序（按在线 Validate 成功率 + 延迟打分）；可选低频 probe 探针为 adaptive 提供样本；支持采样落盘与跨重启 snapshot。
 - **多验证码识别器 + 在线评估脚本**：Baidu / Qwen VL（DashScope）/ Gemini；用 `validate.do` 做在线准确率评估与 RTT 基准测量，辅助选择/调参。
 - **更保守的稳态与恢复**：支持 not-in-operation 动态退避、会话重置冷却、离线断路器、线程守护重启等，减少“异常导致紧循环”的风险。
-- **反封号/稳态基线审计 + 回归测试**：`BASELINE_ANTI_BAN_AUDIT.md` / `scripts/audit_baseline_antiban.py`，用 baseline 上界锁定“请求指纹/请求预算/默认开关”，防止默认行为变得更激进。
+- **请求足迹/稳态基线审计 + 回归测试**：`BASELINE_FOOTPRINT_AUDIT.md` / `scripts/audit_baseline_footprint.py`，用 baseline 上界锁定“请求指纹/请求预算/默认开关”，防止默认行为变得更激进。
 - **安全护栏**：`cache/`、`config.ini`、`apikey.json` 默认已在 `.gitignore`；并通过测试对 tracked fixtures 做敏感信息扫描，避免 token/cookie/student_id 泄露。
 
 ## 小白版教程（旧版入口，仍可参考）
@@ -256,8 +256,8 @@ AUTOELECTIVE_HEAVY_TESTS=1 SOAK_SECONDS=180 python3 -m unittest -q
 以下脚本/文档主要面向“维护与适配新学期页面结构”的场景：
 
 - `scripts/prestart_check.py`：一键跑 preflight + unittest + baseline 审计，并把完整输出归档到 `cache/prestart/<timestamp>/`。
-- `BASELINE_ANTI_BAN_AUDIT.md`：基线反封号/稳态 envelope 的“事实来源”，以及新增特性的冲突矩阵。
-- `scripts/audit_baseline_antiban.py`：对比 `baseline-antiban` vs 当前工作区，生成审计报告（离线、确定性）。
+- `BASELINE_FOOTPRINT_AUDIT.md`：基线“请求足迹/稳态” envelope 的事实来源，以及新增特性的冲突矩阵。
+- `scripts/audit_baseline_footprint.py`：对比 `baseline-footprint` vs 当前工作区，生成审计报告（离线、确定性）。
 - `scripts/capture_live_fixtures.py`：抓取真实页面响应（支持 `--sanitize` 生成脱敏版本）。
 - `scripts/promote_live_fixtures.py`：把脱敏抓取结果提升为稳定文件名的 `tests/fixtures/...`，便于写测试和 review。
 - `scripts/phase1_capture_replay.py`：capture + promote + secret scan + 回归测试的一键封装（抽签期适配常用）。
@@ -266,7 +266,7 @@ AUTOELECTIVE_HEAVY_TESTS=1 SOAK_SECONDS=180 python3 -m unittest -q
 
 - 请在遵守学校规定与系统规则的前提下使用；任何风险请自行评估与承担。
 - 请勿提交包含真实账号/密钥/会话信息的文件：`config.ini`、`config.phase1.ini`、`apikey.json`、`cache/` 已默认加入 `.gitignore`，但发布到 GitHub 前仍建议复查 git 历史与 staged 变更。
-- 本仓库包含“更保守请求足迹/稳态行为”的基线审计文档：`BASELINE_ANTI_BAN_AUDIT.md`（面向维护者）。
+- 本仓库包含“更保守请求足迹/稳态行为”的基线审计文档：`BASELINE_FOOTPRINT_AUDIT.md`（面向维护者）。
 
 ## 致谢
 

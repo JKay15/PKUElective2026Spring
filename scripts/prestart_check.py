@@ -52,7 +52,11 @@ def _run_to_file(cmd: list[str], out_file: Path, env: dict[str, str] | None = No
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Phase 1 prestart checks (offline-first + archived outputs).")
     parser.add_argument("-c", "--config", required=True, help="config.ini path to validate and use for tests.")
-    parser.add_argument("--baseline", default="baseline-antiban", help="baseline git commit/tag for audit (default: baseline-antiban)")
+    parser.add_argument(
+        "--baseline",
+        default="baseline-footprint",
+        help="baseline git commit/tag for audit (default: baseline-footprint)",
+    )
     parser.add_argument(
         "--strict",
         action="store_true",
@@ -101,11 +105,11 @@ def main(argv=None) -> int:
 
     # Step 3: baseline audit (offline)
     rc = _run_to_file(
-        [py, str(Path(REPO_ROOT) / "scripts" / "audit_baseline_antiban.py"), "--baseline", str(args.baseline)],
-        out_dir / "audit_baseline_antiban.txt",
+        [py, str(Path(REPO_ROOT) / "scripts" / "audit_baseline_footprint.py"), "--baseline", str(args.baseline)],
+        out_dir / "audit_baseline_footprint.txt",
         env=env,
     )
-    meta["steps"].append({"name": "audit_baseline_antiban", "rc": rc, "out": "audit_baseline_antiban.txt"})
+    meta["steps"].append({"name": "audit_baseline_footprint", "rc": rc, "out": "audit_baseline_footprint.txt"})
     overall = max(overall, rc)
 
     with (out_dir / "meta.json").open("w", encoding="utf-8") as fp:

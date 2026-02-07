@@ -77,12 +77,12 @@ $PY -m unittest -q
 
 预期：`OK`（heavy tests 默认 skip，不会分钟级）。
 
-## Step 4：基线反封号审计回归（必跑）
+## Step 4：基线请求足迹/稳态审计回归（必跑）
 
-目的：确认当前版本没有“更激进”的请求足迹，并且没有破坏基线的反封号 envelope。
+目的：确认当前版本没有“更激进”的请求足迹，并且没有破坏基线的“保守默认行为”上界。
 
 ```bash
-$PY scripts/audit_baseline_antiban.py --baseline baseline-antiban
+$PY scripts/audit_baseline_footprint.py --baseline baseline-footprint
 ```
 
 预期：

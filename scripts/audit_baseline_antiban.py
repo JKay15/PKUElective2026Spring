@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Tuple
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_BASELINE = "ee5ab5c"
+DEFAULT_BASELINE = "baseline-antiban"
 DEFAULT_OUT = os.path.join(REPO_ROOT, "cache", "audit", "baseline_antiban_audit.json")
 
 
@@ -479,7 +479,7 @@ def generate_audit(baseline_commit: str) -> dict:
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Audit baseline anti-ban/stability behaviors vs current workspace")
-    parser.add_argument("--baseline", default=DEFAULT_BASELINE, help="baseline git commit (default: ee5ab5c)")
+    parser.add_argument("--baseline", default=DEFAULT_BASELINE, help="baseline git commit/tag (default: baseline-antiban)")
     parser.add_argument("--out", default=DEFAULT_OUT, help="output json path (default: cache/audit/baseline_antiban_audit.json)")
     args = parser.parse_args(argv)
 
@@ -497,4 +497,3 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

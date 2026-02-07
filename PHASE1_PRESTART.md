@@ -82,7 +82,7 @@ $PY -m unittest -q
 目的：确认当前版本没有“更激进”的请求足迹，并且没有破坏基线的反封号 envelope。
 
 ```bash
-$PY scripts/audit_baseline_antiban.py --baseline ee5ab5c
+$PY scripts/audit_baseline_antiban.py --baseline baseline-antiban
 ```
 
 预期：

@@ -29,4 +29,3 @@ python3 scripts/benchmark_repeatability.py \
 - Repeating the **same image** improves exact-match by ~5pp and char accuracy by ~3.8pp.
 - This improvement is modest relative to the 5x cost in time/requests.
 - For speed-critical flows, it’s likely **not worth repeating the same image**; better to refresh the captcha and retry.
-

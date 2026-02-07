@@ -52,7 +52,7 @@ def _run_to_file(cmd: list[str], out_file: Path, env: dict[str, str] | None = No
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Phase 1 prestart checks (offline-first + archived outputs).")
     parser.add_argument("-c", "--config", required=True, help="config.ini path to validate and use for tests.")
-    parser.add_argument("--baseline", default="ee5ab5c", help="baseline git commit for audit (default: ee5ab5c)")
+    parser.add_argument("--baseline", default="baseline-antiban", help="baseline git commit/tag for audit (default: baseline-antiban)")
     parser.add_argument(
         "--strict",
         action="store_true",
@@ -122,4 +122,3 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1,4 +1,4 @@
-# PKUElective Baseline Anti-Ban / Stability Audit (ee5ab5c)
+# PKUElective Baseline Anti-Ban / Stability Audit (baseline-antiban)
 
 This document is the "source of truth" for what we treat as baseline (pre-Codex) behaviors that are likely relevant to:
 
@@ -10,13 +10,13 @@ We cannot reliably test "ban thresholds" offline. Therefore we lock down **basel
 
 ## 1. Baseline Version定位
 
-- Baseline git commit: `ee5ab5c`
+- Baseline git commit/tag: `baseline-antiban`
 - Baseline scope: `autoelective/**/*.py` (and config defaults)
 
 How to regenerate the audit report (offline, deterministic):
 
 ```bash
-python scripts/audit_baseline_antiban.py --baseline ee5ab5c
+python scripts/audit_baseline_antiban.py --baseline baseline-antiban
 ```
 
 Default outputs:
@@ -70,18 +70,18 @@ Default outputs:
 
 | 类别 | 条目 | 基线证据 | 当前证据 | 状态 | 优化 | 冲突点/备注 |
 |---|---|---|---|---|---|---|
-| 指纹 | UA per session | `ee5ab5c:autoelective/loop.py` | `autoelective/loop.py` | inherited | no | 不要每轮随机 UA（更可疑） |
-| 指纹 | IAAA default headers | `ee5ab5c:autoelective/iaaa.py` | `autoelective/iaaa.py` | inherited | no | `tests/offline/test_request_fingerprint_baseline_offline.py` |
-| 指纹 | Elective default headers | `ee5ab5c:autoelective/elective.py` | `autoelective/elective.py` | inherited | no | 同上 |
-| 指纹 | Referer(SupplyCancel=Help) | `ee5ab5c:autoelective/elective.py` | `autoelective/elective.py` | inherited | no | 同上 |
-| 指纹 | Referer(Action=SupplyCancel) | `ee5ab5c:autoelective/elective.py` | `autoelective/elective.py` | inherited | no | 同上 |
-| 指纹 | Dummy JSESSIONID on SSO | `ee5ab5c:autoelective/elective.py::sso_login` | `autoelective/elective.py::sso_login` | inherited | no | 同上 |
-| 指纹 | Random QS (`_rand`/`Rand`) | `ee5ab5c:autoelective/elective.py` | `autoelective/elective.py` | inherited | no | 兼容/缓存 |
-| 频率 | Refresh jitter | `ee5ab5c:autoelective/loop.py::_get_refresh_interval` | `autoelective/loop.py::_get_refresh_interval` | inherited | no | `tests/offline/test_refresh_jitter_offline.py` |
-| 频率 | Idle budget (no Draw/Validate/Elect) | `ee5ab5c:autoelective/loop.py` | `autoelective/loop.py` | inherited | no | `tests/offline/test_request_budget_offline.py` |
-| 会话 | persist_cookies on hook exceptions | `ee5ab5c:autoelective/client.py::persist_cookies` | `autoelective/client.py::persist_cookies` | inherited | no | 防止会话莫名过期 |
-| 恢复 | NotInOperation treated as non-failure | `ee5ab5c:autoelective/hook.py` | `autoelective/loop.py` | inherited | yes | 当前增加动态长睡，更保守 |
-| 安全 | Debug dump default OFF | `ee5ab5c:autoelective/hook.py` | `autoelective/hook.py` | inherited | no | `tests/offline/test_debug_dump_safety_offline.py` |
+| 指纹 | UA per session | `baseline-antiban:autoelective/loop.py` | `autoelective/loop.py` | inherited | no | 不要每轮随机 UA（更可疑） |
+| 指纹 | IAAA default headers | `baseline-antiban:autoelective/iaaa.py` | `autoelective/iaaa.py` | inherited | no | `tests/offline/test_request_fingerprint_baseline_offline.py` |
+| 指纹 | Elective default headers | `baseline-antiban:autoelective/elective.py` | `autoelective/elective.py` | inherited | no | 同上 |
+| 指纹 | Referer(SupplyCancel=Help) | `baseline-antiban:autoelective/elective.py` | `autoelective/elective.py` | inherited | no | 同上 |
+| 指纹 | Referer(Action=SupplyCancel) | `baseline-antiban:autoelective/elective.py` | `autoelective/elective.py` | inherited | no | 同上 |
+| 指纹 | Dummy JSESSIONID on SSO | `baseline-antiban:autoelective/elective.py::sso_login` | `autoelective/elective.py::sso_login` | inherited | no | 同上 |
+| 指纹 | Random QS (`_rand`/`Rand`) | `baseline-antiban:autoelective/elective.py` | `autoelective/elective.py` | inherited | no | 兼容/缓存 |
+| 频率 | Refresh jitter | `baseline-antiban:autoelective/loop.py::_get_refresh_interval` | `autoelective/loop.py::_get_refresh_interval` | inherited | no | `tests/offline/test_refresh_jitter_offline.py` |
+| 频率 | Idle budget (no Draw/Validate/Elect) | `baseline-antiban:autoelective/loop.py` | `autoelective/loop.py` | inherited | no | `tests/offline/test_request_budget_offline.py` |
+| 会话 | persist_cookies on hook exceptions | `baseline-antiban:autoelective/client.py::persist_cookies` | `autoelective/client.py::persist_cookies` | inherited | no | 防止会话莫名过期 |
+| 恢复 | NotInOperation treated as non-failure | `baseline-antiban:autoelective/hook.py` | `autoelective/loop.py` | inherited | yes | 当前增加动态长睡，更保守 |
+| 安全 | Debug dump default OFF | `baseline-antiban:autoelective/hook.py` | `autoelective/hook.py` | inherited | no | `tests/offline/test_debug_dump_safety_offline.py` |
 | 安全 | Tracked secret scan | n/a | `tests/offline/test_fixture_secret_scan_offline.py` | added | yes | 防止 fixture/doc 泄露 |
 | 新增 | Captcha degrade->monitor-only | n/a | `autoelective/loop.py` | added | yes | `tests/offline/test_captcha_chain_policy_offline.py` |
 | 新增 | Captcha probe thread | n/a | `autoelective/loop.py` | added (OFF) | yes | 必须 OFF by default；共享 pool |

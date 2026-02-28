@@ -1,0 +1,12 @@
+[project]
+name = "pkuelective2026spring"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "flask",
+    "lxml",
+    "numpy",
+    "pillow",
+    "requests",
+    "werkzeug==2.2.2",
+]

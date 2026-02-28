@@ -1,6 +1,5 @@
 import base64
 from io import BytesIO
-import json
 import os
 import time
 import requests
@@ -8,35 +7,8 @@ from PIL import Image
 import urllib
 from .captcha import Captcha
 from .registry import CaptchaRecognizer, register_recognizer
-from .._internal import get_abs_path
 from ..config import AutoElectiveConfig
 from ..exceptions import OperationFailedError, OperationTimeoutError, RecognizerError
-
-class APIConfig(object):
-
-    _DEFAULT_CONFIG_PATH = '../apikey.json'
-
-    def __init__(self, path=_DEFAULT_CONFIG_PATH):
-        with open(get_abs_path(path), 'r') as handle:
-            self._apikey = json.load(handle)
-        try:
-            assert 'username' in self._apikey.keys() and 'password' in self._apikey.keys()
-            assert 'RecognitionTypeid' in self._apikey.keys()
-        except AssertionError as e:
-            print("Check your apikey.json for necessary key")
-            exit(-1)
-
-    @property
-    def uname(self):
-        return self._apikey['username']
-
-    @property
-    def pwd(self):
-        return self._apikey['password']
-
-    @property
-    def typeid(self):
-        return int(self._apikey['RecognitionTypeid'])
 
 def get_access_token(api_key, secret_key, timeout, session=None):
     """
@@ -88,11 +60,7 @@ def get_file_content_as_base64(path, urlencoded=False):
 class BaiduOCRRecognizer(CaptchaRecognizer):
     name = "baidu"
 
-    # _RECOGNIZER_URL = "http://api.ttshitu.com/base64"
-    
-
     def __init__(self):
-        # self._config = APIConfig()
         config = AutoElectiveConfig()
         self._api_key = config.baidu_api_key or os.getenv("BAIDU_OCR_API_KEY")
         self._secret_key = config.baidu_secret_key or os.getenv("BAIDU_OCR_SECRET_KEY")
@@ -156,17 +124,8 @@ class BaiduOCRRecognizer(CaptchaRecognizer):
             raise OperationFailedError(msg="Unable to connect to the recognizer")
         except requests.RequestException as e:
             raise OperationFailedError(msg="Recognizer request failed: %s" % e)
-        # _typeid_ = self._config.typeid
-        # encode = TTShituRecognizer._to_b64(raw)
-        # data = {
-        #     "username": self._config.uname, 
-        #     "password": self._config.pwd,
-        #     "image": encode,
-        #     "typeid": _typeid_
-        # }
         try:
             result = response.json()
-            # result = json.loads(requests.post(TTShituRecognizer._RECOGNIZER_URL, json=data, timeout=20).text)
         except ValueError:
             raise RecognizerError(msg="Recognizer ERROR: Invalid JSON response")
         
@@ -177,12 +136,7 @@ class BaiduOCRRecognizer(CaptchaRecognizer):
             return Captcha(result['words_result'][0]['words'], None, None, None, None)
         else:
             raise RecognizerError(msg="Recognizer ERROR: %s" % result["error_msg"])
-        # if result["success"]:
-        #     return Captcha(result["data"]["result"], None, None, None, None)
-        # else: # fail
-        #     raise RecognizerError(msg="Recognizer ERROR: %s" % result["message"])
     
-    @staticmethod
     @staticmethod
     def _to_b64(raw):
         im = Image.open(BytesIO(raw))
@@ -198,7 +152,3 @@ class BaiduOCRRecognizer(CaptchaRecognizer):
         im.convert('RGB').save(buffer, format='JPEG')
         b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         return b64
-
-
-# Backward-compatible alias
-TTShituRecognizer = BaiduOCRRecognizer

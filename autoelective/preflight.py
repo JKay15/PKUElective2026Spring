@@ -19,26 +19,21 @@ def _is_blank(s) -> bool:
     return s is None or str(s).strip() == ""
 
 
-def _is_allowed_provider(name: str) -> bool:
+def _provider_kind(name: str) -> str:
     n = (name or "").strip().lower()
     if not n:
-        return False
+        return "unknown"
     if n in {"dummy", "baidu", "gemini"}:
-        return True
-    # All Qwen variants/aliases start with "qwen" (e.g. qwen3-vl-flash, qwen-vl-ocr, qwen2.5-...).
-    if n.startswith("qwen"):
-        return True
-    return False
+        return n
+    # Any other provider is treated as an OpenAI-compatible model id.
+    return "openai_compat"
 
 
-def _required_key_paths(provider: str) -> list[str]:
-    p = (provider or "").strip().lower()
-    if p == "baidu":
+def _required_key_paths(provider_kind: str) -> list[str]:
+    if provider_kind == "baidu":
         return ["captcha.baidu_api_key", "captcha.baidu_secret_key"]
-    if p == "gemini":
+    if provider_kind == "gemini":
         return ["captcha.gemini_api_key"]
-    if p.startswith("qwen"):
-        return ["captcha.dashscope_api_key"]
     return []
 
 
@@ -52,7 +47,36 @@ def _get_key_value(config, key_path: str):
         return config.gemini_api_key
     if key_path == "captcha.dashscope_api_key":
         return config.dashscope_api_key
+    if key_path == "captcha.openai_api_key":
+        return config.openai_api_key
+    if key_path == "captcha.api_key":
+        return config.captcha_api_key
+    if key_path == "captcha.base_url":
+        return config.captcha_base_url
+    if key_path == "captcha.model_name":
+        return config.captcha_model_name
     raise KeyError(key_path)
+
+
+def _has_openai_compat_key(config) -> bool:
+    return not _is_blank(getattr(config, "captcha_api_key", None))
+
+
+def _openai_base_url(config) -> str:
+    v = getattr(config, "captcha_base_url", None) or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    return str(v).strip().lower()
+
+
+def _is_local_base_url(base_url: str) -> bool:
+    u = (base_url or "").strip().lower()
+    return (
+        u.startswith("http://127.0.0.1")
+        or u.startswith("https://127.0.0.1")
+        or u.startswith("http://localhost")
+        or u.startswith("https://localhost")
+        or u.startswith("http://0.0.0.0")
+        or u.startswith("https://0.0.0.0")
+    )
 
 
 def run_preflight(config) -> list[PreflightIssue]:
@@ -121,16 +145,10 @@ def run_preflight(config) -> list[PreflightIssue]:
         provider = ""
         _add("ERROR", "captcha_provider_read_failed", f"Unable to read captcha.provider: {e}", "captcha.provider")
 
-    if provider and not _is_allowed_provider(provider):
-        _add(
-            "ERROR",
-            "captcha_provider_unknown",
-            f"Unknown captcha provider: {provider!r}. Allowed: dummy/baidu/gemini/qwen*",
-            "captcha.provider",
-        )
+    provider_kind = _provider_kind(provider)
 
     if provider:
-        for kp in _required_key_paths(provider):
+        for kp in _required_key_paths(provider_kind):
             try:
                 v = _get_key_value(config, kp)
             except Exception as e:
@@ -138,8 +156,45 @@ def run_preflight(config) -> list[PreflightIssue]:
                 continue
             if _is_blank(v):
                 _add("ERROR", "captcha_key_missing", f"Missing required credential for provider {provider!r}: {kp}", kp)
+        if provider_kind == "openai_compat":
+            base_url = _openai_base_url(config)
+            if _is_blank(base_url):
+                _add(
+                    "ERROR",
+                    "captcha_key_missing",
+                    "Missing required config for OpenAI-compatible provider: captcha.base_url",
+                    "captcha.base_url",
+                )
+            if provider == "openai" and _is_blank(getattr(config, "captcha_model_name", None)):
+                _add(
+                    "ERROR",
+                    "captcha_key_missing",
+                    "Missing required config when captcha.provider=openai: captcha.model_name",
+                    "captcha.model_name",
+                )
+            if not _has_openai_compat_key(config):
+                if _is_local_base_url(base_url):
+                    _add(
+                        "WARN",
+                        "captcha_openai_key_missing",
+                        (
+                            "captcha.api_key is empty. This is allowed for local/self-hosted endpoints without auth."
+                        ),
+                        "captcha.api_key",
+                    )
+                else:
+                    _add(
+                        "ERROR",
+                        "captcha_key_missing",
+                        (
+                            "Missing required config for OpenAI-compatible provider: captcha.api_key "
+                            "(or legacy openai_api_key/dashscope_api_key)."
+                        ),
+                        "captcha.api_key",
+                    )
 
-    # fallback providers: must be known and must have required keys.
+    # fallback providers: validate required keys.
+    # Unknown names are treated as OpenAI-compatible model ids.
     try:
         fallbacks = list(config.captcha_fallback_providers or [])
     except Exception as e:
@@ -150,15 +205,8 @@ def run_preflight(config) -> list[PreflightIssue]:
         fp = (fp or "").strip().lower()
         if not fp:
             continue
-        if not _is_allowed_provider(fp):
-            _add(
-                "ERROR",
-                "captcha_fallback_unknown",
-                f"Unknown fallback captcha provider: {fp!r}. Allowed: dummy/baidu/gemini/qwen*",
-                "captcha.fallback_providers",
-            )
-            continue
-        for kp in _required_key_paths(fp):
+        fallback_kind = _provider_kind(fp)
+        for kp in _required_key_paths(fallback_kind):
             try:
                 v = _get_key_value(config, kp)
             except Exception as e:
@@ -170,6 +218,35 @@ def run_preflight(config) -> list[PreflightIssue]:
                     "captcha_fallback_key_missing",
                     f"Missing required credential for fallback {fp!r}: {kp}",
                     kp,
+                )
+        if fallback_kind == "openai_compat" and not _has_openai_compat_key(config):
+            base_url = _openai_base_url(config)
+            if fp == "openai" and _is_blank(getattr(config, "captcha_model_name", None)):
+                _add(
+                    "ERROR",
+                    "captcha_fallback_key_missing",
+                    "Missing required config for fallback 'openai': captcha.model_name",
+                    "captcha.model_name",
+                )
+            if _is_local_base_url(base_url):
+                _add(
+                    "WARN",
+                    "captcha_fallback_openai_key_missing",
+                    (
+                        f"captcha.api_key is empty for fallback {fp!r}. "
+                        "This is allowed for local/self-hosted endpoints without auth."
+                    ),
+                    "captcha.api_key",
+                )
+            else:
+                _add(
+                    "ERROR",
+                    "captcha_fallback_key_missing",
+                    (
+                        f"Missing required config for OpenAI-compatible fallback {fp!r}: captcha.api_key "
+                        "(or legacy openai_api_key/dashscope_api_key)."
+                    ),
+                    "captcha.api_key",
                 )
 
     # WARN: probe enabled increases background requests; probe_share_pool=false implies extra session slot usage.
@@ -202,4 +279,3 @@ def run_preflight(config) -> list[PreflightIssue]:
         _add("ERROR", "rate_limit_enable_read_failed", f"Unable to read rate_limit.enable: {e}", "rate_limit.enable")
 
     return issues
-

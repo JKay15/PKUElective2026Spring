@@ -41,7 +41,7 @@ cp config.sample.ini "$CFG"
 - `[user] student_id / password / dual_degree / identity`
 - 你计划使用的识别器密钥（不提交真实密钥）：
   - `baidu`: `[captcha] baidu_api_key / baidu_secret_key`
-  - `qwen*`: `[captcha] dashscope_api_key`
+  - `openai`/自建 OpenAI-compatible 模型: `[captcha] model_name/api_key/base_url`（兼容旧键）
   - `gemini`: `[captcha] gemini_api_key`
 
 ## Step 2：配置预检（必跑，静态检查）
@@ -165,4 +165,4 @@ $PY scripts/phase1_capture_replay.py -c "$CFG" --pages 3 --draw-count 5 --sleep 
 git status --porcelain
 ```
 
-预期：不出现 `config.ini/config.phase1.ini/apikey.json/cache/` 之类敏感或本地文件的 staged 变更。
+预期：不出现 `config.ini/config.phase1.ini/cache/` 之类敏感或本地文件的 staged 变更。

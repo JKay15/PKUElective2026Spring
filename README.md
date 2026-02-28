@@ -11,10 +11,10 @@
 - **抽签期（Phase 1）一套可复制 Runbook**：`PHASE1_PRESTART.md` + `PHASE1_RUNBOOK.md`，把“抓取真实 HTML + 脱敏 + 提升为 fixture + 回归测试”流程固化。
 - **离线回放测试与 fixtures 工具链**：支持抓取/脱敏/提升 fixtures，并通过 `unittest` 离线回归覆盖解析容错、退避策略、验证码策略等关键路径。
 - **验证码多模型链路管理（核心亮点）**：支持 `provider + fallback_providers` 组成识别链；失败自动 degrade 冷却并可切换识别器；可选 adaptive 自适应排序（按在线 Validate 成功率 + 延迟打分）；可选低频 probe 探针为 adaptive 提供样本；支持采样落盘与跨重启 snapshot。
-- **多验证码识别器 + 在线评估脚本**：Baidu / Qwen VL（DashScope）/ Gemini；用 `validate.do` 做在线准确率评估与 RTT 基准测量，辅助选择/调参。
+- **多验证码识别器 + 在线评估脚本**：Baidu / OpenAI-compatible OCR / Gemini；用 `validate.do` 做在线准确率评估与 RTT 基准测量，辅助选择/调参。
 - **更保守的稳态与恢复**：支持 not-in-operation 动态退避、会话重置冷却、离线断路器、线程守护重启等，减少“异常导致紧循环”的风险。
 - **请求足迹/稳态基线审计 + 回归测试**：`BASELINE_FOOTPRINT_AUDIT.md` / `scripts/audit_baseline_footprint.py`，用 baseline 上界锁定“请求指纹/请求预算/默认开关”，防止默认行为变得更激进。
-- **安全护栏**：`cache/`、`config.ini`、`apikey.json` 默认已在 `.gitignore`；并通过测试对 tracked fixtures 做敏感信息扫描，避免 token/cookie/student_id 泄露。
+- **安全护栏**：`cache/`、`config.ini`、`.vscode/` 默认已在 `.gitignore`；并通过测试对 tracked fixtures 做敏感信息扫描，避免 token/cookie/student_id 泄露。
 
 ## 小白版教程（旧版入口，仍可参考）
 
@@ -22,15 +22,15 @@
 
 ## 安装
 
-> 运行环境：建议 Python 3.10+（优先 3.11/3.12）。
+> 运行环境：建议 Python 3.10+（优先 3.11/3.12）。依赖管理使用 `uv`。
 
 ```bash
 git clone https://github.com/JKay15/PKUElective2026Spring.git
 cd PKUElective2026Spring
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 ```
+
+如未安装 `uv`，先参考官方安装文档：[astral-sh/uv](https://docs.astral.sh/uv/getting-started/installation/)。
 
 ## 配置（必读）
 
@@ -59,19 +59,19 @@ export AUTOELECTIVE_CONFIG_INI=config.phase1.ini
 1) 先跑静态预检（不联网）：
 
 ```bash
-python3 main.py --preflight
+uv run python main.py --preflight
 ```
 
 2) 启动主程序：
 
 ```bash
-python3 main.py
+uv run python main.py
 ```
 
 可选：启动本地监控线程（默认 `127.0.0.1:7074`，具体见 `[monitor]`）：
 
 ```bash
-python3 main.py -m
+uv run python main.py -m
 ```
 
 停止：`Ctrl + C`。
@@ -81,7 +81,7 @@ python3 main.py -m
 只读演练不会触发 `electSupplement`（即不会真实提交选课），用于确认“登录/抓页/验证码链路”在当前学期可用。
 
 ```bash
-python3 scripts/rehearsal_readonly.py -c config.ini
+uv run python scripts/rehearsal_readonly.py -c config.ini
 ```
 
 默认输出在 `cache/rehearsal/<timestamp>/`（已被 `.gitignore` 忽略）。
@@ -96,7 +96,7 @@ python3 scripts/rehearsal_readonly.py -c config.ini
 最常用的一条命令是“一键抓取 + 提升 + 脱敏扫描 + 回归”：
 
 ```bash
-python3 scripts/phase1_capture_replay.py -c config.phase1.ini --pages 3 --draw-count 5 --sleep 1.0 --strict
+uv run python scripts/phase1_capture_replay.py -c config.phase1.ini --pages 3 --draw-count 5 --sleep 1.0 --strict
 ```
 
 ## 验证码：多模型链路（fallback / degrade / adaptive / probe）
@@ -105,10 +105,41 @@ python3 scripts/phase1_capture_replay.py -c config.phase1.ini --pages 3 --draw-c
 
 ### 支持的 providers（示例）
 
+- `openai`：标准 OpenAI-compatible 调用（推荐）
 - `baidu`：Baidu OCR
 - `gemini`：Gemini Vision OCR
-- `qwen*`：Qwen VL（DashScope，示例：`qwen3-vl-flash` / `qwen3-vl-plus` / `qwen-vl-ocr-2025-11-20`）
+- 任意模型 ID（例如 `qwen3-vl-flash` / `qwen-vl-ocr-2025-11-20` / `your-local-vl`）：自动按 OpenAI-compatible 调用
 - `dummy`：离线占位（仅用于测试/调试）
+
+### OpenAI-compatible 调用方式（推荐）
+
+验证码识别走标准 OpenAI-compatible 接口：
+
+- 路径：`POST {base_url}/chat/completions`
+- 鉴权：`Authorization: Bearer {api_key}`（本地无鉴权网关可留空）
+- 模型：`model_name`
+
+目标就是：只填 `model_name / api_key / base_url` 三项即可跑。  
+不需要手动注册模型，也不需要额外改代码。
+
+示例 A：标准写法（推荐）
+
+```ini
+[captcha]
+provider=openai
+model_name=qwen3-vl-flash
+api_key=YOUR_DASHSCOPE_KEY
+base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+示例 B：provider 直接写模型名（同样支持）
+
+```ini
+[captcha]
+provider=your-vl-model-name
+api_key=
+base_url=http://127.0.0.1:8000/v1
+```
 
 ### 1) 识别链（primary + fallbacks）
 
@@ -116,8 +147,9 @@ python3 scripts/phase1_capture_replay.py -c config.phase1.ini --pages 3 --draw-c
 
 ```ini
 [captcha]
-provider=qwen3-vl-flash
-fallback_providers=qwen3-vl-plus,baidu
+provider=openai
+model_name=qwen3-vl-flash
+fallback_providers=qwen-vl-ocr-2025-11-20,baidu
 ```
 
 说明：
@@ -208,7 +240,7 @@ sample_dir=cache/captcha_samples
 比较多个 provider 的在线通过率（更贴近真实）：
 
 ```bash
-python3 scripts/benchmark_captcha_validate_accuracy.py \
+uv run python scripts/benchmark_captcha_validate_accuracy.py \
   -c config.ini \
   --providers baidu,qwen3-vl-flash,qwen3-vl-plus,gemini \
   --samples 30 \
@@ -218,7 +250,38 @@ python3 scripts/benchmark_captcha_validate_accuracy.py \
 测 `Draw + Validate` 的 RTT（用于 `adaptive_h_init` 冷启动）：
 
 ```bash
-python3 scripts/benchmark_captcha_http_rtt.py -c config.ini --samples 30 --sleep 0.2
+uv run python scripts/benchmark_captcha_http_rtt.py -c config.ini --samples 30 --sleep 0.2
+```
+
+### 7) 在线稳定性循环测试（无课也能跑）
+
+只做 `DrawServlet -> OCR -> validate.do` 循环，不触发选课提交。  
+用于验证“即便没课，验证码链路也不会把 loop 跑崩”。
+
+```bash
+uv run python scripts/test_captcha_online_loop.py -c config.ini --rounds 60 --sleep 0.5
+```
+
+如果要测“主程序 loop 是否会卡死/线程是否掉线”（而不是只测验证码链路），再跑 watchdog：
+
+```bash
+uv run python scripts/test_main_loop_online_watchdog.py -c config.ini --duration 180 --poll 2 --stall-seconds 30
+```
+
+无课阶段建议先打开 probe，让主循环在“无可选课程”时也持续做低频验证码在线探测：
+
+```ini
+[captcha]
+probe_enabled=true
+probe_interval=5
+probe_backoff=30
+probe_share_pool=true
+```
+
+watchdog 默认会要求 `probe_attempt` 增长；若你暂时不想开 probe，可显式关闭该检查：
+
+```bash
+uv run python scripts/test_main_loop_online_watchdog.py -c config.ini --duration 180 --require-probe=false
 ```
 
 ## Bark 通知（可选）
@@ -236,19 +299,19 @@ minimum_interval=0
 测试推送：
 
 ```bash
-python3 scripts/test_bark_notify.py
+uv run python scripts/test_bark_notify.py
 ```
 
 ## 测试（离线回归）
 
 ```bash
-python3 -m unittest -q
+uv run python -m unittest -q
 ```
 
 重测试（soak / fault / concurrency）默认不会跑；只有显式设置才会启用：
 
 ```bash
-AUTOELECTIVE_HEAVY_TESTS=1 SOAK_SECONDS=180 python3 -m unittest -q
+AUTOELECTIVE_HEAVY_TESTS=1 SOAK_SECONDS=180 uv run python -m unittest -q
 ```
 
 ## 维护者工具（可选）
@@ -265,7 +328,7 @@ AUTOELECTIVE_HEAVY_TESTS=1 SOAK_SECONDS=180 python3 -m unittest -q
 ## 安全与注意事项
 
 - 请在遵守学校规定与系统规则的前提下使用；任何风险请自行评估与承担。
-- 请勿提交包含真实账号/密钥/会话信息的文件：`config.ini`、`config.phase1.ini`、`apikey.json`、`cache/` 已默认加入 `.gitignore`，但发布到 GitHub 前仍建议复查 git 历史与 staged 变更。
+- 请勿提交包含真实账号/密钥/会话信息的文件：`config.ini`、`config.phase1.ini`、`cache/` 已默认加入 `.gitignore`，但发布到 GitHub 前仍建议复查 git 历史与 staged 变更。
 - 本仓库包含“更保守请求足迹/稳态行为”的基线审计文档：`BASELINE_FOOTPRINT_AUDIT.md`（面向维护者）。
 
 ## 致谢

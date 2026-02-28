@@ -5,17 +5,15 @@
 
 from .captcha import Captcha
 from .registry import CaptchaRecognizer, get_recognizer
-from .online import TTShituRecognizer, BaiduOCRRecognizer
+from .online import BaiduOCRRecognizer
 from .gemini import GeminiVLMRecognizer
-from .qwen import Qwen3VlFlashRecognizer, Qwen3VlPlusRecognizer
+from .qwen import OpenAICompatRecognizer
 
 __all__ = [
     "Captcha",
     "CaptchaRecognizer",
     "get_recognizer",
-    "TTShituRecognizer",
     "BaiduOCRRecognizer",
     "GeminiVLMRecognizer",
-    "Qwen3VlFlashRecognizer",
-    "Qwen3VlPlusRecognizer",
+    "OpenAICompatRecognizer",
 ]

@@ -104,6 +104,7 @@ CAPTCHA_DEGRADE_MONITOR_ONLY = config.captcha_degrade_monitor_only
 CAPTCHA_DEGRADE_NOTIFY = config.captcha_degrade_notify
 CAPTCHA_DEGRADE_NOTIFY_INTERVAL = config.captcha_degrade_notify_interval
 CAPTCHA_SWITCH_ON_DEGRADE = config.captcha_switch_on_degrade
+CAPTCHA_VALIDATE_ROUND_TIMEOUT = config.captcha_validate_round_timeout
 
 CAPTCHA_PROBE_ENABLED = config.captcha_probe_enabled
 CAPTCHA_PROBE_INTERVAL = config.captcha_probe_interval
@@ -2141,7 +2142,16 @@ def run_elective_loop():
                 ## validate captcha first
 
                 validated = False
+                round_begin = time.time()
                 for _ in range(RECOGNIZER_MAX_ATTEMPT):
+                    if time.time() - round_begin >= CAPTCHA_VALIDATE_ROUND_TIMEOUT:
+                        cout.warning(
+                            "Captcha round timeout (>%ss), stop retrying and refresh"
+                            % int(CAPTCHA_VALIDATE_ROUND_TIMEOUT)
+                        )
+                        _stat_inc("captcha_round_timeout")
+                        _record_captcha_failure()
+                        break
                     provider_name = _recognizer_names[recognizer_index]
                     cout.info("Fetch a captcha")
                     t_draw = time.time()
@@ -2210,7 +2220,9 @@ def run_elective_loop():
                         "Validation failed after %d attempts, skip %s for now"
                         % (RECOGNIZER_MAX_ATTEMPT, course)
                     )
-                    continue
+                    _stat_inc("captcha_round_failed")
+                    # Force a refresh round quickly instead of staying in long per-course captcha loops.
+                    break
 
                 ## try to elect
 

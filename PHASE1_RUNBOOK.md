@@ -42,7 +42,7 @@ cp config.sample.ini "$CFG"
 - `[user] student_id / password / dual_degree / identity`
 - 你要测试的识别器密钥：
   - `baidu`: `[captcha] baidu_api_key / baidu_secret_key`
-  - `qwen*`: `[captcha] dashscope_api_key`（可选填 `dashscope_base_url`）
+  - `openai`/自建 OpenAI-compatible 模型: `[captcha] model_name/api_key/base_url`（兼容旧键）
   - `gemini`: `[captcha] gemini_api_key`
 
 快速自检（确认 `config.phase1.ini` 能被读取）：

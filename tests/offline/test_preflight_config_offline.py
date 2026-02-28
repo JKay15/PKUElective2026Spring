@@ -51,7 +51,7 @@ baidu_secret_key=
         self.assertTrue(any(i.code == "captcha_key_missing" and i.key_path == "captcha.baidu_api_key" for i in errs))
         self.assertTrue(any(i.code == "captcha_key_missing" and i.key_path == "captcha.baidu_secret_key" for i in errs))
 
-    def test_provider_qwen_missing_dashscope_key_error(self):
+    def test_provider_qwen_missing_api_key_error(self):
         issues = _run_preflight_with_ini(
             """
 [client]
@@ -61,11 +61,48 @@ elective_client_pool_size=2
 
 [captcha]
 provider=qwen3-vl-flash
-dashscope_api_key=
+api_key=
 """
         )
         errs = [i for i in issues if i.level == "ERROR"]
-        self.assertTrue(any(i.code == "captcha_key_missing" and i.key_path == "captcha.dashscope_api_key" for i in errs))
+        self.assertTrue(any(i.code == "captcha_key_missing" and i.key_path == "captcha.api_key" for i in errs))
+
+    def test_custom_openai_compat_provider_on_local_base_url_warn_only(self):
+        issues = _run_preflight_with_ini(
+            """
+[client]
+refresh_interval=4
+random_deviation=0.01
+elective_client_pool_size=2
+
+[captcha]
+provider=my-local-vl
+base_url=http://127.0.0.1:8000/v1
+api_key=
+"""
+        )
+        errs = [i for i in issues if i.level == "ERROR"]
+        warns = [i for i in issues if i.level == "WARN"]
+        self.assertEqual(errs, [])
+        self.assertTrue(any(i.code == "captcha_openai_key_missing" for i in warns))
+
+    def test_provider_openai_missing_model_name_error(self):
+        issues = _run_preflight_with_ini(
+            """
+[client]
+refresh_interval=4
+random_deviation=0.01
+elective_client_pool_size=2
+
+[captcha]
+provider=openai
+base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
+api_key=K
+model_name=
+"""
+        )
+        errs = [i for i in issues if i.level == "ERROR"]
+        self.assertTrue(any(i.code == "captcha_key_missing" and i.key_path == "captcha.model_name" for i in errs))
 
     def test_refresh_interval_low_warn(self):
         issues = _run_preflight_with_ini(
@@ -104,4 +141,3 @@ gemini_api_key=
 
 if __name__ == "__main__":
     unittest.main()
-

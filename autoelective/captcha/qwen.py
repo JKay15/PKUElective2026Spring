@@ -70,49 +70,75 @@ def _extract_code_candidate(text, min_len, max_len):
     return candidates[-1] if candidates else ""
 
 
-class _QwenVLBase(CaptchaRecognizer):
-    name = None
-    default_model = None
-    config_model_override = None
+def _default_prompt(min_len, max_len):
+    if min_len == max_len:
+        len_rule = "exactly %d characters" % min_len
+    else:
+        len_rule = "between %d and %d characters" % (min_len, max_len)
+    return (
+        "Recognize the text in this captcha image.\n"
+        "Return only the recognized text.\n"
+        "Do not output JSON, explanation, punctuation, or extra content.\n"
+        "Use only A-Z and 0-9, %s.\n" % len_rule
+    )
 
-    def __init__(self):
+
+@register_recognizer
+class OpenAICompatRecognizer(CaptchaRecognizer):
+    """
+    Generic OpenAI-compatible OCR recognizer.
+
+    Supports:
+    - provider=openai + [captcha] model_name/api_key/base_url
+    - provider=<any_model_id> (no manual model registration needed)
+    """
+
+    name = "openai"
+    aliases = ["openai_compat", "openai-compatible", "qwen"]
+
+    def __init__(self, runtime_model=None):
         cfg = AutoElectiveConfig()
-        self._api_key = cfg.dashscope_api_key or os.getenv("DASHSCOPE_API_KEY")
-        self._base_url = (cfg.dashscope_base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
-        self._timeout = cfg.dashscope_timeout
-        self._max_output_tokens = cfg.dashscope_max_output_tokens
+        self._api_key = (
+            cfg.captcha_api_key
+            or os.getenv("OPENAI_API_KEY")
+            or os.getenv("DASHSCOPE_API_KEY")
+        )
+        self._base_url = (
+            cfg.captcha_base_url
+            or os.getenv("OPENAI_BASE_URL")
+            or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        ).rstrip("/")
+        self._timeout = cfg.captcha_request_timeout
+        self._max_output_tokens = cfg.captcha_max_output_tokens
         self._min_len = cfg.captcha_code_length_min
         self._max_len = cfg.captcha_code_length_max
         if self._min_len > self._max_len:
             self._min_len, self._max_len = self._max_len, self._min_len
+
+        model = (runtime_model or "").strip() or (cfg.captcha_model_name or "").strip()
+        if not model:
+            raise RecognizerError(
+                msg=(
+                    "Model not configured for OpenAI-compatible captcha OCR. "
+                    "Set [captcha] model_name, or use provider=<model_name>."
+                )
+            )
+        self._model = model
+        self._prompt = (cfg.captcha_prompt or "").strip() or _default_prompt(
+            self._min_len, self._max_len
+        )
         self._session = requests.Session()
 
-        if not self._api_key:
+        if not self._api_key and "dashscope.aliyuncs.com" in self._base_url:
             raise RecognizerError(
-                msg="DashScope API key not configured. Set [captcha] dashscope_api_key or env DASHSCOPE_API_KEY."
+                msg=(
+                    "API key missing for DashScope-compatible endpoint. "
+                    "Set [captcha] api_key (or OPENAI_API_KEY / DASHSCOPE_API_KEY)."
+                )
             )
-
-        # Model selection: per-provider override first, then generic, then default.
-        model_override = cfg.dashscope_model
-        override_key = getattr(self, "config_model_override", None)
-        if override_key:
-            model_override = getattr(cfg, override_key) or model_override
-        self._model = (model_override or self.default_model).strip()
 
     def recognize(self, raw):
         img = _to_jpeg_bytes(raw)
-        if self._min_len == self._max_len:
-            len_rule = f"exactly {self._min_len} characters"
-        else:
-            len_rule = f"between {self._min_len} and {self._max_len} characters"
-
-        prompt = (
-            "You are an OCR engine. Read the captcha text from the image.\n"
-            "Return STRICT JSON with a single key 'text'.\n"
-            f"The value must be {len_rule} (A-Z, 0-9) with no spaces.\n"
-            "If uncertain, make your best guess.\n"
-        )
-
         url = self._base_url + "/chat/completions"
         payload = {
             "model": self._model,
@@ -123,28 +149,29 @@ class _QwenVLBase(CaptchaRecognizer):
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": "data:image/jpeg;base64," + base64.b64encode(img).decode("utf-8")
+                                "url": "data:image/jpeg;base64,"
+                                + base64.b64encode(img).decode("utf-8")
                             },
                         },
-                        {"type": "text", "text": prompt},
+                        {"type": "text", "text": self._prompt},
                     ],
                 }
             ],
             "temperature": 0,
             "max_tokens": int(self._max_output_tokens),
         }
-
-        headers = {
-            "Authorization": "Bearer " + self._api_key,
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = "Bearer " + self._api_key
 
         backoff = 1.0
         resp = None
         data = None
         for attempt in range(3):
             try:
-                resp = self._session.post(url, headers=headers, json=payload, timeout=self._timeout)
+                resp = self._session.post(
+                    url, headers=headers, json=payload, timeout=self._timeout
+                )
             except (requests.Timeout, requests.ConnectionError) as e:
                 if attempt < 2:
                     time.sleep(backoff)
@@ -208,76 +235,12 @@ class _QwenVLBase(CaptchaRecognizer):
             if fallback and self._min_len <= len(fallback) <= self._max_len:
                 code = fallback
             else:
-                raise RecognizerError(msg="Recognizer ERROR: Unexpected code length: %r" % code)
+                raise RecognizerError(
+                    msg="Recognizer ERROR: Unexpected code length: %r" % code
+                )
 
         return Captcha(code, None, None, None, None)
 
 
-def _alias_names(name):
-    aliases = []
-    alias = name.replace("-", "_").replace(".", "_")
-    if alias != name:
-        aliases.append(alias)
-    return aliases
-
-
-def _make_recognizer(class_name, model_name, override_key=None):
-    attrs = {
-        "name": model_name,
-        "default_model": model_name,
-        "config_model_override": override_key,
-        "aliases": _alias_names(model_name),
-    }
-    cls = type(class_name, (_QwenVLBase,), attrs)
-    return register_recognizer(cls)
-
-
-# Stable flash/plus (allow config overrides)
-Qwen3VlFlashRecognizer = _make_recognizer(
-    "Qwen3VlFlashRecognizer",
-    "qwen3-vl-flash",
-    override_key="dashscope_model_flash",
-)
-Qwen3VlPlusRecognizer = _make_recognizer(
-    "Qwen3VlPlusRecognizer",
-    "qwen3-vl-plus",
-    override_key="dashscope_model_plus",
-)
-
-# Snapshot and other variants
-Qwen3VlFlash20260122Recognizer = _make_recognizer(
-    "Qwen3VlFlash20260122Recognizer",
-    "qwen3-vl-flash-2026-01-22",
-)
-Qwen3VlPlus20251219Recognizer = _make_recognizer(
-    "Qwen3VlPlus20251219Recognizer",
-    "qwen3-vl-plus-2025-12-19",
-)
-QwenVlMaxRecognizer = _make_recognizer(
-    "QwenVlMaxRecognizer",
-    "qwen-vl-max",
-)
-QwenVlPlusRecognizer = _make_recognizer(
-    "QwenVlPlusRecognizer",
-    "qwen-vl-plus",
-)
-Qwen25Vl32bInstructRecognizer = _make_recognizer(
-    "Qwen25Vl32bInstructRecognizer",
-    "qwen2.5-vl-32b-instruct",
-)
-Qwen25Vl7bInstructRecognizer = _make_recognizer(
-    "Qwen25Vl7bInstructRecognizer",
-    "qwen2.5-vl-7b-instruct",
-)
-
-# Qwen OCR (Model Studio)
-QwenVlOcrRecognizer = _make_recognizer(
-    "QwenVlOcrRecognizer",
-    "qwen-vl-ocr",
-    override_key="dashscope_model_ocr",
-)
-QwenVlOcr20251120Recognizer = _make_recognizer(
-    "QwenVlOcr20251120Recognizer",
-    "qwen-vl-ocr-2025-11-20",
-    override_key="dashscope_model_ocr",
-)
+def build_openai_compat_recognizer(model_name=None):
+    return OpenAICompatRecognizer(runtime_model=model_name)

@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 # filename: registry.py
 
-from ..exceptions import RecognizerError
 from .captcha import Captcha
 from ..config import AutoElectiveConfig
 
@@ -40,7 +39,11 @@ def get_recognizer(name=None):
         name = "baidu"
     cls = _REGISTRY.get(name)
     if cls is None:
-        raise RecognizerError(msg="Unknown captcha provider: %s" % name)
+        # Treat unknown provider as an OpenAI-compatible model name so users
+        # can plug in arbitrary hosted/local model IDs without changing code.
+        from .qwen import build_openai_compat_recognizer
+
+        return build_openai_compat_recognizer(model_name=name)
     return cls()
 
 

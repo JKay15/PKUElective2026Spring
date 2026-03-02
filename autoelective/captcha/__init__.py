@@ -7,7 +7,7 @@ from .captcha import Captcha
 from .registry import CaptchaRecognizer, get_recognizer
 from .online import BaiduOCRRecognizer
 from .gemini import GeminiVLMRecognizer
-from .qwen import OpenAICompatRecognizer
+from .openai_api import OpenAICompatRecognizer
 
 __all__ = [
     "Captcha",

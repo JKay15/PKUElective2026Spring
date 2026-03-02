@@ -108,7 +108,6 @@ uv run python scripts/phase1_capture_replay.py -c config.phase1.ini --pages 3 --
 - `openai`：标准 OpenAI-compatible 调用（推荐）
 - `baidu`：Baidu OCR
 - `gemini`：Gemini Vision OCR
-- 任意模型 ID（例如 `qwen3-vl-flash` / `qwen-vl-ocr-2025-11-20` / `your-local-vl`）：自动按 OpenAI-compatible 调用
 - `dummy`：离线占位（仅用于测试/调试）
 
 ### OpenAI-compatible 调用方式（推荐）
@@ -132,11 +131,12 @@ api_key=YOUR_DASHSCOPE_KEY
 base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
-示例 B：provider 直接写模型名（同样支持）
+示例 B：本地/自建 OpenAI-compatible 服务（同样写 `provider=openai`）
 
 ```ini
 [captcha]
-provider=your-vl-model-name
+provider=openai
+model_name=your-local-vl
 api_key=
 base_url=http://127.0.0.1:8000/v1
 ```
@@ -148,7 +148,6 @@ base_url=http://127.0.0.1:8000/v1
 - 默认值：`4` 到 `6`
 - 作用：帮助从模型输出中筛选候选字符串，降低“多余字符/噪声文本”被当作验证码的概率
 - 适配建议：如果你知道目标系统验证码固定 4 位，可改成 `4` 到 `4`
-- 兼容项：旧参数 `code_length` 仍可用（固定长度），但建议优先使用 `code_length_min/max`
 
 ### 1) 识别链（primary + fallbacks）
 
@@ -158,7 +157,7 @@ base_url=http://127.0.0.1:8000/v1
 [captcha]
 provider=openai
 model_name=qwen3-vl-flash
-fallback_providers=qwen-vl-ocr-2025-11-20,baidu
+fallback_providers=gemini,baidu
 ```
 
 说明：
@@ -248,10 +247,13 @@ sample_dir=cache/captcha_samples
 
 比较多个 provider 的在线通过率（更贴近真实）：
 
+`--targets` 语法：`provider[:model],provider[:model]`  
+说明：只有 `openai` 支持 `:model` 覆盖；`baidu/gemini/dummy` 不接受 `:model`。
+
 ```bash
 uv run python scripts/benchmark_captcha_validate_accuracy.py \
   -c config.ini \
-  --providers baidu,qwen3-vl-flash,qwen3-vl-plus,gemini \
+  --targets openai:qwen3-vl-flash,openai:qwen3-vl-plus,gemini \
   --samples 30 \
   --sleep 0.5
 ```

@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from types import SimpleNamespace
 from unittest import mock
 
 from autoelective.captcha.captcha import Captcha
@@ -43,7 +44,7 @@ class CaptchaSampleEvalOfflineTest(unittest.TestCase):
             out = io.StringIO()
             dummy = _DummyRecognizer("ABCD")
 
-            with mock.patch.object(eval_script, "get_recognizer", new=lambda _p: dummy), \
+            with mock.patch.object(eval_script, "get_recognizer", new=lambda _p, model_name=None: dummy), \
                  mock.patch.object(eval_script, "AutoElectiveConfig", new=lambda: None), \
                  mock.patch.object(eval_script, "main", wraps=eval_script.main) as _:
                 argv = [
@@ -52,8 +53,8 @@ class CaptchaSampleEvalOfflineTest(unittest.TestCase):
                     tmpdir,
                     "--labels",
                     labels_path,
-                    "--providers",
-                    "dummy",
+                    "--targets",
+                    "dummy,openai:qwen3-vl-flash",
                 ]
                 with mock.patch("sys.argv", new=argv), redirect_stdout(out):
                     rc = eval_script.main()
@@ -61,10 +62,33 @@ class CaptchaSampleEvalOfflineTest(unittest.TestCase):
             text = out.getvalue()
             self.assertEqual(rc, 0)
             self.assertIn("== dummy ==", text)
+            self.assertIn("== openai:qwen3-vl-flash ==", text)
             self.assertIn("exact=1.000", text)
             self.assertIn("latency_ms:", text)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_eval_script_rejects_non_openai_model_override_target(self):
+        import scripts.captcha_sample_eval as eval_script
+
+        out = io.StringIO()
+        cfg = SimpleNamespace(
+            captcha_sample_dir="/tmp/unused",
+            captcha_provider="dummy",
+            captcha_fallback_providers=[],
+        )
+        argv = [
+            "captcha_sample_eval.py",
+            "--targets",
+            "baidu:abc",
+        ]
+        with mock.patch.object(eval_script, "AutoElectiveConfig", new=lambda: cfg):
+            with mock.patch("sys.argv", new=argv), redirect_stdout(out):
+                rc = eval_script.main()
+
+        text = out.getvalue()
+        self.assertEqual(rc, 2)
+        self.assertIn("invalid targets", text)
 
 
 if __name__ == "__main__":

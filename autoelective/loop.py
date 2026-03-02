@@ -91,7 +91,7 @@ for _name in [config.captcha_provider] + config.captcha_fallback_providers:
     _recognizer_seen.add(_name)
     _recognizer_names.append(_name)
 if not _recognizer_names:
-    _recognizer_names = ["baidu"]
+    _recognizer_names = ["openai"]
 _recognizer_map = {n: get_recognizer(n) for n in _recognizer_names}
 recognizers = [_recognizer_map[n] for n in _recognizer_names]
 recognizer_index = 0

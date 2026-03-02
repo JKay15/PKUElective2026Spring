@@ -6,6 +6,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from .captcha.targets import ALLOWED_CAPTCHA_PROVIDERS
+
+_LEGACY_KEY_MIGRATIONS = {
+    "openai_model": "model_name",
+    "openai_api_key": "api_key",
+    "openai_base_url": "base_url",
+    "openai_timeout": "request_timeout",
+    "openai_max_output_tokens": "max_output_tokens",
+    "dashscope_api_key": "api_key",
+    "dashscope_base_url": "base_url",
+    "dashscope_timeout": "request_timeout",
+    "dashscope_max_output_tokens": "max_output_tokens",
+    "dashscope_model": "model_name",
+    "dashscope_model_flash": "model_name",
+    "dashscope_model_plus": "model_name",
+    "dashscope_model_ocr": "model_name",
+    "code_length": "code_length_min/code_length_max",
+}
+
 
 @dataclass(frozen=True)
 class PreflightIssue:
@@ -19,20 +38,19 @@ def _is_blank(s) -> bool:
     return s is None or str(s).strip() == ""
 
 
-def _provider_kind(name: str) -> str:
+def _normalized_provider(name: str) -> str:
     n = (name or "").strip().lower()
     if not n:
         return "unknown"
-    if n in {"dummy", "baidu", "gemini"}:
+    if n in ALLOWED_CAPTCHA_PROVIDERS:
         return n
-    # Any other provider is treated as an OpenAI-compatible model id.
-    return "openai_compat"
+    return "invalid"
 
 
-def _required_key_paths(provider_kind: str) -> list[str]:
-    if provider_kind == "baidu":
+def _required_key_paths(provider: str) -> list[str]:
+    if provider == "baidu":
         return ["captcha.baidu_api_key", "captcha.baidu_secret_key"]
-    if provider_kind == "gemini":
+    if provider == "gemini":
         return ["captcha.gemini_api_key"]
     return []
 
@@ -45,10 +63,6 @@ def _get_key_value(config, key_path: str):
         return config.baidu_secret_key
     if key_path == "captcha.gemini_api_key":
         return config.gemini_api_key
-    if key_path == "captcha.dashscope_api_key":
-        return config.dashscope_api_key
-    if key_path == "captcha.openai_api_key":
-        return config.openai_api_key
     if key_path == "captcha.api_key":
         return config.captcha_api_key
     if key_path == "captcha.base_url":
@@ -89,6 +103,20 @@ def run_preflight(config) -> list[PreflightIssue]:
 
     def _add(level: str, code: str, message: str, key_path: str | None = None):
         issues.append(PreflightIssue(level=level, code=code, message=message, key_path=key_path))
+
+    for old_key, new_key in _LEGACY_KEY_MIGRATIONS.items():
+        try:
+            v = config.get_optional("captcha", old_key, None)
+        except Exception:
+            v = None
+        if v is not None:
+            _add(
+                "ERROR",
+                "captcha_legacy_key_unsupported",
+                "Unsupported legacy config key captcha.%s; migrate to captcha.%s."
+                % (old_key, new_key),
+                "captcha.%s" % old_key,
+            )
 
     # [captcha] code length range
     try:
@@ -145,10 +173,18 @@ def run_preflight(config) -> list[PreflightIssue]:
         provider = ""
         _add("ERROR", "captcha_provider_read_failed", f"Unable to read captcha.provider: {e}", "captcha.provider")
 
-    provider_kind = _provider_kind(provider)
+    provider_norm = _normalized_provider(provider)
+    if provider_norm == "invalid":
+        _add(
+            "ERROR",
+            "captcha_provider_invalid",
+            "Unsupported captcha.provider %r. Allowed providers: %s."
+            % (provider, ", ".join(ALLOWED_CAPTCHA_PROVIDERS)),
+            "captcha.provider",
+        )
 
-    if provider:
-        for kp in _required_key_paths(provider_kind):
+    if provider and provider_norm in ALLOWED_CAPTCHA_PROVIDERS:
+        for kp in _required_key_paths(provider_norm):
             try:
                 v = _get_key_value(config, kp)
             except Exception as e:
@@ -156,7 +192,7 @@ def run_preflight(config) -> list[PreflightIssue]:
                 continue
             if _is_blank(v):
                 _add("ERROR", "captcha_key_missing", f"Missing required credential for provider {provider!r}: {kp}", kp)
-        if provider_kind == "openai_compat":
+        if provider_norm == "openai":
             base_url = _openai_base_url(config)
             if _is_blank(base_url):
                 _add(
@@ -165,7 +201,7 @@ def run_preflight(config) -> list[PreflightIssue]:
                     "Missing required config for OpenAI-compatible provider: captcha.base_url",
                     "captcha.base_url",
                 )
-            if provider == "openai" and _is_blank(getattr(config, "captcha_model_name", None)):
+            if _is_blank(getattr(config, "captcha_model_name", None)):
                 _add(
                     "ERROR",
                     "captcha_key_missing",
@@ -187,14 +223,12 @@ def run_preflight(config) -> list[PreflightIssue]:
                         "ERROR",
                         "captcha_key_missing",
                         (
-                            "Missing required config for OpenAI-compatible provider: captcha.api_key "
-                            "(or legacy openai_api_key/dashscope_api_key)."
+                            "Missing required config for OpenAI-compatible provider: captcha.api_key."
                         ),
                         "captcha.api_key",
                     )
 
-    # fallback providers: validate required keys.
-    # Unknown names are treated as OpenAI-compatible model ids.
+    # fallback providers: validate provider names + required keys.
     try:
         fallbacks = list(config.captcha_fallback_providers or [])
     except Exception as e:
@@ -205,8 +239,18 @@ def run_preflight(config) -> list[PreflightIssue]:
         fp = (fp or "").strip().lower()
         if not fp:
             continue
-        fallback_kind = _provider_kind(fp)
-        for kp in _required_key_paths(fallback_kind):
+        fp_norm = _normalized_provider(fp)
+        if fp_norm == "invalid":
+            _add(
+                "ERROR",
+                "captcha_fallback_provider_invalid",
+                "Unsupported captcha fallback provider %r. Allowed providers: %s."
+                % (fp, ", ".join(ALLOWED_CAPTCHA_PROVIDERS)),
+                "captcha.fallback_providers",
+            )
+            continue
+
+        for kp in _required_key_paths(fp_norm):
             try:
                 v = _get_key_value(config, kp)
             except Exception as e:
@@ -219,35 +263,42 @@ def run_preflight(config) -> list[PreflightIssue]:
                     f"Missing required credential for fallback {fp!r}: {kp}",
                     kp,
                 )
-        if fallback_kind == "openai_compat" and not _has_openai_compat_key(config):
+        if fp_norm == "openai":
             base_url = _openai_base_url(config)
-            if fp == "openai" and _is_blank(getattr(config, "captcha_model_name", None)):
+            if _is_blank(base_url):
+                _add(
+                    "ERROR",
+                    "captcha_fallback_key_missing",
+                    "Missing required config for OpenAI-compatible fallback 'openai': captcha.base_url",
+                    "captcha.base_url",
+                )
+            if _is_blank(getattr(config, "captcha_model_name", None)):
                 _add(
                     "ERROR",
                     "captcha_fallback_key_missing",
                     "Missing required config for fallback 'openai': captcha.model_name",
                     "captcha.model_name",
                 )
-            if _is_local_base_url(base_url):
-                _add(
-                    "WARN",
-                    "captcha_fallback_openai_key_missing",
-                    (
-                        f"captcha.api_key is empty for fallback {fp!r}. "
-                        "This is allowed for local/self-hosted endpoints without auth."
-                    ),
-                    "captcha.api_key",
-                )
-            else:
-                _add(
-                    "ERROR",
-                    "captcha_fallback_key_missing",
-                    (
-                        f"Missing required config for OpenAI-compatible fallback {fp!r}: captcha.api_key "
-                        "(or legacy openai_api_key/dashscope_api_key)."
-                    ),
-                    "captcha.api_key",
-                )
+            if not _has_openai_compat_key(config):
+                if _is_local_base_url(base_url):
+                    _add(
+                        "WARN",
+                        "captcha_fallback_openai_key_missing",
+                        (
+                            f"captcha.api_key is empty for fallback {fp!r}. "
+                            "This is allowed for local/self-hosted endpoints without auth."
+                        ),
+                        "captcha.api_key",
+                    )
+                else:
+                    _add(
+                        "ERROR",
+                        "captcha_fallback_key_missing",
+                        (
+                            f"Missing required config for OpenAI-compatible fallback {fp!r}: captcha.api_key."
+                        ),
+                        "captcha.api_key",
+                    )
 
     # WARN: probe enabled increases background requests; probe_share_pool=false implies extra session slot usage.
     try:

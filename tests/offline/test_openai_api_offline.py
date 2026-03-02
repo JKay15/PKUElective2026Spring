@@ -37,7 +37,7 @@ def _fake_post_ok(self, url, **kwargs):
     )
 
 
-class QwenOfflineTest(unittest.TestCase):
+class OpenAIApiOfflineTest(unittest.TestCase):
     def setUp(self):
         self._cfg_old = os.environ.get("AUTOELECTIVE_CONFIG_INI")
         cfg = Path(__file__).resolve().parents[2] / "config.sample.ini"
@@ -51,20 +51,20 @@ class QwenOfflineTest(unittest.TestCase):
             os.environ["AUTOELECTIVE_CONFIG_INI"] = self._cfg_old
         Singleton._inst.pop(AutoElectiveConfig, None)
 
-    @mock.patch.dict(os.environ, {"DASHSCOPE_API_KEY": "dummy"}, clear=False)
+    @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "dummy"}, clear=False)
     @mock.patch("requests.sessions.Session.post", new=_fake_post_ok)
-    def test_qwen_recognizer_parses_json_text(self):
-        r = get_recognizer("qwen3-vl-flash")
+    def test_openai_recognizer_parses_json_text(self):
+        r = get_recognizer("openai", model_name="qwen3-vl-flash")
         buf = BytesIO()
         Image.new("RGB", (16, 16), (255, 255, 255)).save(buf, format="JPEG")
         cap = r.recognize(buf.getvalue())
         self.assertIsInstance(cap, Captcha)
         self.assertEqual(cap.code, "AB12")
 
-    @mock.patch.dict(os.environ, {"DASHSCOPE_API_KEY": "dummy"}, clear=False)
+    @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "dummy"}, clear=False)
     @mock.patch("requests.sessions.Session.post", new=_fake_post_ok)
-    def test_qwen_ocr_recognizer_parses_json_text(self):
-        r = get_recognizer("qwen-vl-ocr-2025-11-20")
+    def test_openai_recognizer_accepts_another_model(self):
+        r = get_recognizer("openai", model_name="qwen-vl-ocr-2025-11-20")
         buf = BytesIO()
         Image.new("RGB", (16, 16), (255, 255, 255)).save(buf, format="JPEG")
         cap = r.recognize(buf.getvalue())

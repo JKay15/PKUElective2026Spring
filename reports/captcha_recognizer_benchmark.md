@@ -16,13 +16,13 @@ Date: 2026-02-04
 Commands:
 ```bash
 python3 scripts/benchmark_captcha_recognizers.py \
-  --images-dir cache/captcha_synth --providers qwen3-vl-flash,qwen3-vl-flash-2026-01-22,qwen3-vl-plus,qwen3-vl-plus-2025-12-19,qwen-vl-max,qwen-vl-plus,qwen2.5-vl-32b-instruct,qwen2.5-vl-7b-instruct --max 40 --sleep 0.05
+  --images-dir cache/captcha_synth --targets openai:qwen3-vl-flash,openai:qwen3-vl-flash-2026-01-22,openai:qwen3-vl-plus,openai:qwen3-vl-plus-2025-12-19,openai:qwen-vl-max,openai:qwen-vl-plus,openai:qwen2.5-vl-32b-instruct,openai:qwen2.5-vl-7b-instruct --max 40 --sleep 0.05
 
 python3 scripts/benchmark_captcha_recognizers.py \
-  --images-dir cache/captcha_synth --providers qwen-vl-ocr-2025-11-20,baidu --max 40 --sleep 0.05
+  --images-dir cache/captcha_synth --targets openai:qwen-vl-ocr-2025-11-20,baidu --max 40 --sleep 0.05
 
 python3 scripts/benchmark_captcha_recognizers.py \
-  --images-dir cache/captcha_synth --providers baidu --max 40 --sleep 0.05
+  --images-dir cache/captcha_synth --targets baidu --max 40 --sleep 0.05
 ```
 
 ## Results

@@ -51,7 +51,45 @@ baidu_secret_key=
         self.assertTrue(any(i.code == "captcha_key_missing" and i.key_path == "captcha.baidu_api_key" for i in errs))
         self.assertTrue(any(i.code == "captcha_key_missing" and i.key_path == "captcha.baidu_secret_key" for i in errs))
 
-    def test_provider_qwen_missing_api_key_error(self):
+    def test_provider_openai_missing_api_key_error(self):
+        issues = _run_preflight_with_ini(
+            """
+[client]
+refresh_interval=4
+random_deviation=0.01
+elective_client_pool_size=2
+
+[captcha]
+provider=openai
+model_name=qwen3-vl-flash
+base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
+api_key=
+"""
+        )
+        errs = [i for i in issues if i.level == "ERROR"]
+        self.assertTrue(any(i.code == "captcha_key_missing" and i.key_path == "captcha.api_key" for i in errs))
+
+    def test_provider_openai_on_local_base_url_warn_only(self):
+        issues = _run_preflight_with_ini(
+            """
+[client]
+refresh_interval=4
+random_deviation=0.01
+elective_client_pool_size=2
+
+[captcha]
+provider=openai
+model_name=qwen3-vl-flash
+base_url=http://127.0.0.1:8000/v1
+api_key=
+"""
+        )
+        errs = [i for i in issues if i.level == "ERROR"]
+        warns = [i for i in issues if i.level == "WARN"]
+        self.assertEqual(errs, [])
+        self.assertTrue(any(i.code == "captcha_openai_key_missing" for i in warns))
+
+    def test_provider_invalid_error(self):
         issues = _run_preflight_with_ini(
             """
 [client]
@@ -61,30 +99,10 @@ elective_client_pool_size=2
 
 [captcha]
 provider=qwen3-vl-flash
-api_key=
 """
         )
         errs = [i for i in issues if i.level == "ERROR"]
-        self.assertTrue(any(i.code == "captcha_key_missing" and i.key_path == "captcha.api_key" for i in errs))
-
-    def test_custom_openai_compat_provider_on_local_base_url_warn_only(self):
-        issues = _run_preflight_with_ini(
-            """
-[client]
-refresh_interval=4
-random_deviation=0.01
-elective_client_pool_size=2
-
-[captcha]
-provider=my-local-vl
-base_url=http://127.0.0.1:8000/v1
-api_key=
-"""
-        )
-        errs = [i for i in issues if i.level == "ERROR"]
-        warns = [i for i in issues if i.level == "WARN"]
-        self.assertEqual(errs, [])
-        self.assertTrue(any(i.code == "captcha_openai_key_missing" for i in warns))
+        self.assertTrue(any(i.code == "captcha_provider_invalid" and i.key_path == "captcha.provider" for i in errs))
 
     def test_provider_openai_missing_model_name_error(self):
         issues = _run_preflight_with_ini(
@@ -137,6 +155,41 @@ gemini_api_key=
         )
         errs = [i for i in issues if i.level == "ERROR"]
         self.assertTrue(any(i.code == "captcha_fallback_key_missing" and i.key_path == "captcha.gemini_api_key" for i in errs))
+
+    def test_fallback_provider_invalid_error(self):
+        issues = _run_preflight_with_ini(
+            """
+[client]
+refresh_interval=4
+random_deviation=0.01
+elective_client_pool_size=2
+
+[captcha]
+provider=dummy
+fallback_providers=qwen3-vl-plus
+"""
+        )
+        errs = [i for i in issues if i.level == "ERROR"]
+        self.assertTrue(any(i.code == "captcha_fallback_provider_invalid" for i in errs))
+
+    def test_legacy_key_is_explicitly_rejected(self):
+        issues = _run_preflight_with_ini(
+            """
+[client]
+refresh_interval=4
+random_deviation=0.01
+elective_client_pool_size=2
+
+[captcha]
+provider=openai
+model_name=qwen3-vl-flash
+base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
+api_key=K
+openai_api_key=legacy
+"""
+        )
+        errs = [i for i in issues if i.level == "ERROR"]
+        self.assertTrue(any(i.code == "captcha_legacy_key_unsupported" and i.key_path == "captcha.openai_api_key" for i in errs))
 
 
 if __name__ == "__main__":

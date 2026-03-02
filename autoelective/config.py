@@ -303,34 +303,18 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
 
     @property
     def captcha_api_key(self):
-        # Preferred key name: api_key (OpenAI-compatible standard).
-        # Keep legacy aliases for backward compatibility.
-        return (
-            self.get_optional("captcha", "api_key")
-            or self.get_optional("captcha", "openai_api_key")
-            or self.get_optional("captcha", "dashscope_api_key")
-        )
+        return self.get_optional("captcha", "api_key")
 
     @property
     def captcha_base_url(self):
-        # Preferred key name: base_url (OpenAI-compatible standard).
-        # Keep legacy aliases for backward compatibility.
         return (
             self.get_optional("captcha", "base_url")
-            or self.get_optional("captcha", "openai_base_url")
-            or self.get_optional("captcha", "dashscope_base_url")
             or "https://dashscope.aliyuncs.com/compatible-mode/v1"
         )
 
     @property
     def captcha_model_name(self):
-        # Preferred key name: model_name (OpenAI-compatible standard).
-        # Keep legacy aliases for backward compatibility.
-        return (
-            self.get_optional("captcha", "model_name")
-            or self.get_optional("captcha", "openai_model")
-            or self.get_optional("captcha", "dashscope_model")
-        )
+        return self.get_optional("captcha", "model_name")
 
     @property
     def captcha_prompt(self):
@@ -340,7 +324,7 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
     def captcha_request_timeout(self):
         v = self.get_optional("captcha", "request_timeout")
         if v is None or v == "":
-            return self.openai_timeout
+            return 10.0
         try:
             v = float(v)
         except ValueError:
@@ -351,7 +335,7 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
     def captcha_max_output_tokens(self):
         v = self.get_optional("captcha", "max_output_tokens")
         if v is None or v == "":
-            return self.openai_max_output_tokens
+            return 16
         try:
             v = int(v)
         except ValueError:
@@ -377,24 +361,10 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
             raise UserInputException("Invalid baidu_timeout: %r" % v)
 
     @property
-    def captcha_code_length(self):
-        # Legacy: fixed captcha length.
-        v = self.get_optional("captcha", "code_length")
-        if v is None or v == "":
-            return 4
-        try:
-            v = int(v)
-        except ValueError:
-            raise UserInputException("Invalid code_length: %r" % v)
-        return max(1, v)
-
-    @property
     def captcha_code_length_min(self):
         v_min = self.get_optional("captcha", "code_length_min")
         v_max = self.get_optional("captcha", "code_length_max")
         if v_min is None or v_min == "":
-            # Default range is 4..6.
-            # If user only sets max, default min to 4.
             if v_max is not None and v_max != "":
                 return 4
             return 4
@@ -409,7 +379,6 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         v_min = self.get_optional("captcha", "code_length_min")
         v_max = self.get_optional("captcha", "code_length_max")
         if v_max is None or v_max == "":
-            # If user only sets min, default max to min.
             if v_min is not None and v_min != "":
                 try:
                     v_min_i = int(v_min)
@@ -451,88 +420,6 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         except ValueError:
             raise UserInputException("Invalid gemini_max_output_tokens: %r" % v)
         return max(1, v)
-
-    @property
-    def dashscope_api_key(self):
-        return self.get_optional("captcha", "dashscope_api_key")
-
-    @property
-    def openai_api_key(self):
-        # Backward-compat alias.
-        return self.captcha_api_key
-
-    @property
-    def openai_base_url(self):
-        # Backward-compat alias.
-        return self.captcha_base_url
-
-    @property
-    def openai_timeout(self):
-        v = self.get_optional("captcha", "openai_timeout")
-        if v is None or v == "":
-            return self.dashscope_timeout
-        try:
-            return float(v)
-        except ValueError:
-            raise UserInputException("Invalid openai_timeout: %r" % v)
-
-    @property
-    def openai_max_output_tokens(self):
-        v = self.get_optional("captcha", "openai_max_output_tokens")
-        if v is None or v == "":
-            return self.dashscope_max_output_tokens
-        try:
-            v = int(v)
-        except ValueError:
-            raise UserInputException("Invalid openai_max_output_tokens: %r" % v)
-        return max(1, v)
-
-    @property
-    def openai_model(self):
-        # Backward-compat alias.
-        return self.captcha_model_name
-
-    @property
-    def dashscope_base_url(self):
-        return self.get_optional("captcha", "dashscope_base_url")
-
-    @property
-    def dashscope_timeout(self):
-        v = self.get_optional("captcha", "dashscope_timeout")
-        if v is None or v == "":
-            return 10.0
-        try:
-            v = float(v)
-        except ValueError:
-            raise UserInputException("Invalid dashscope_timeout: %r" % v)
-        return max(0.1, v)
-
-    @property
-    def dashscope_max_output_tokens(self):
-        v = self.get_optional("captcha", "dashscope_max_output_tokens")
-        if v is None or v == "":
-            return 16
-        try:
-            v = int(v)
-        except ValueError:
-            raise UserInputException("Invalid dashscope_max_output_tokens: %r" % v)
-        return max(1, v)
-
-    @property
-    def dashscope_model(self):
-        return self.get_optional("captcha", "dashscope_model")
-
-    @property
-    def dashscope_model_flash(self):
-        return self.get_optional("captcha", "dashscope_model_flash")
-
-    @property
-    def dashscope_model_plus(self):
-        return self.get_optional("captcha", "dashscope_model_plus")
-
-    @property
-    def dashscope_model_ocr(self):
-        return self.get_optional("captcha", "dashscope_model_ocr")
 
     @property
     def captcha_validate_round_timeout(self):

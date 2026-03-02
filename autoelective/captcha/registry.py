@@ -4,6 +4,8 @@
 
 from .captcha import Captcha
 from ..config import AutoElectiveConfig
+from ..exceptions import RecognizerError
+from .targets import ALLOWED_CAPTCHA_PROVIDERS
 
 
 class CaptchaRecognizer(object):
@@ -31,19 +33,32 @@ def register_recognizer(cls):
     return cls
 
 
-def get_recognizer(name=None):
+def get_recognizer(name=None, model_name=None):
     if name is None:
         name = AutoElectiveConfig().captcha_provider
     name = (name or "").strip().lower()
     if not name:
-        name = "baidu"
+        name = "openai"
+    if name not in ALLOWED_CAPTCHA_PROVIDERS:
+        allowed = ", ".join(ALLOWED_CAPTCHA_PROVIDERS)
+        raise RecognizerError(
+            msg="Unsupported captcha provider: %r. Allowed providers: %s."
+            % (name, allowed)
+        )
+    if model_name is not None and name != "openai":
+        raise RecognizerError(
+            msg="Model override is only supported for provider 'openai', got %r."
+            % name
+        )
+
+    if name == "openai" and model_name is not None:
+        from .openai_api import build_openai_compat_recognizer
+
+        return build_openai_compat_recognizer(model_name=model_name)
+
     cls = _REGISTRY.get(name)
     if cls is None:
-        # Treat unknown provider as an OpenAI-compatible model name so users
-        # can plug in arbitrary hosted/local model IDs without changing code.
-        from .qwen import build_openai_compat_recognizer
-
-        return build_openai_compat_recognizer(model_name=name)
+        raise RecognizerError(msg="Recognizer not registered for provider %r." % name)
     return cls()
 
 

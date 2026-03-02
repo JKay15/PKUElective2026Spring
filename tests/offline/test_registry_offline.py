@@ -13,11 +13,9 @@ class RegistryOfflineTest(unittest.TestCase):
     def setUp(self):
         self._cfg_old = os.environ.get("AUTOELECTIVE_CONFIG_INI")
         self._openai_old = os.environ.get("OPENAI_API_KEY")
-        self._dashscope_old = os.environ.get("DASHSCOPE_API_KEY")
         cfg = Path(__file__).resolve().parents[2] / "config.sample.ini"
         os.environ["AUTOELECTIVE_CONFIG_INI"] = str(cfg)
         os.environ.pop("OPENAI_API_KEY", None)
-        os.environ.pop("DASHSCOPE_API_KEY", None)
         Singleton._inst.pop(AutoElectiveConfig, None)
 
     def tearDown(self):
@@ -29,10 +27,6 @@ class RegistryOfflineTest(unittest.TestCase):
             os.environ.pop("OPENAI_API_KEY", None)
         else:
             os.environ["OPENAI_API_KEY"] = self._openai_old
-        if self._dashscope_old is None:
-            os.environ.pop("DASHSCOPE_API_KEY", None)
-        else:
-            os.environ["DASHSCOPE_API_KEY"] = self._dashscope_old
         Singleton._inst.pop(AutoElectiveConfig, None)
 
     def test_dummy_recognizer(self):
@@ -42,8 +36,9 @@ class RegistryOfflineTest(unittest.TestCase):
         self.assertEqual(result.code, "0000")
 
     def test_unknown_recognizer(self):
-        with self.assertRaises(RecognizerError):
+        with self.assertRaises(RecognizerError) as ctx:
             get_recognizer("unknown")
+        self.assertIn("Unsupported captcha provider", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ Date: 2026-02-04
 Command:
 ```bash
 python3 scripts/benchmark_repeatability.py \
-  --images-dir cache/captcha_synth --providers qwen3-vl-flash --max 20 --repeats 5 --sleep 0.05
+  --images-dir cache/captcha_synth --targets openai:qwen3-vl-flash --max 20 --repeats 5 --sleep 0.05
 ```
 
 ## Results

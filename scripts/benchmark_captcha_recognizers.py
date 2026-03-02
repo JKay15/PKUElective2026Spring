@@ -13,6 +13,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from autoelective.captcha import get_recognizer
+from autoelective.captcha.targets import format_target, parse_targets_csv
 from autoelective.exceptions import OperationFailedError, OperationTimeoutError, RecognizerError
 
 
@@ -78,7 +79,11 @@ def summarize(latencies):
 def main():
     parser = argparse.ArgumentParser(description="Benchmark captcha recognizers (speed + accuracy)")
     parser.add_argument("--images-dir", required=True, help="folder with captcha images")
-    parser.add_argument("--providers", required=True, help="comma-separated recognizer names, e.g. baidu,gemini")
+    parser.add_argument(
+        "--targets",
+        required=True,
+        help="comma-separated targets: provider[:model],provider[:model]",
+    )
     parser.add_argument("--max", type=int, default=None, help="max images to test")
     parser.add_argument("--sleep", type=float, default=0.05, help="sleep between requests")
     args = parser.parse_args()
@@ -88,13 +93,15 @@ def main():
         print("No images found.")
         return 2
 
-    providers = [p.strip().lower() for p in args.providers.split(",") if p.strip()]
-    if not providers:
-        print("No providers specified.")
+    try:
+        targets = parse_targets_csv(args.targets)
+    except ValueError as e:
+        print("Invalid --targets:", e)
         return 3
 
-    for provider in providers:
-        recognizer = get_recognizer(provider)
+    for provider, model_name in targets:
+        recognizer = get_recognizer(provider, model_name=model_name)
+        target_name = format_target(provider, model_name)
         ok = 0
         fail = 0
         latencies = []
@@ -129,7 +136,7 @@ def main():
             time.sleep(args.sleep)
 
         stats = summarize(latencies)
-        print("\n=== PROVIDER:", provider, "===")
+        print("\n=== TARGET:", target_name, "===")
         print("ok:", ok, "fail:", fail)
         if stats:
             print(

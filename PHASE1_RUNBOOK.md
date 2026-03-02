@@ -122,7 +122,7 @@ $PY scripts/capture_live_fixtures.py -c "$CFG" --sanitize --help-only --sleep 1.
 用途：不用“人工标注 ground truth”，直接用服务器 `Validate()` 作为判定（通过=识别正确）。这比合成验证码更接近真实。
 
 ```bash
-$PY scripts/benchmark_captcha_validate_accuracy.py -c "$CFG" --providers baidu,qwen3-vl-flash,qwen3-vl-plus --samples 30 --sleep 0.5
+$PY scripts/benchmark_captcha_validate_accuracy.py -c "$CFG" --targets baidu,openai:qwen3-vl-flash,openai:qwen3-vl-plus --samples 30 --sleep 0.5
 ```
 
 观察指标（决定“抢课阶段默认链条”）：

@@ -136,7 +136,7 @@ $PY scripts/capture_live_fixtures.py -c "$CFG" --sanitize --help-only --sleep 1.
 ### 6.2 验证码链路评估（Draw + 识别 + Validate，不 elect）
 
 ```bash
-$PY scripts/benchmark_captcha_validate_accuracy.py -c "$CFG" --providers baidu,qwen3-vl-flash,qwen3-vl-plus --samples 30 --sleep 0.5
+$PY scripts/benchmark_captcha_validate_accuracy.py -c "$CFG" --targets baidu,openai:qwen3-vl-flash,openai:qwen3-vl-plus --samples 30 --sleep 0.5
 ```
 
 ### 6.3 RTT 评估（用于 adaptive 冷启动）

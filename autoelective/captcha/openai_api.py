@@ -90,18 +90,16 @@ class OpenAICompatRecognizer(CaptchaRecognizer):
 
     Supports:
     - provider=openai + [captcha] model_name/api_key/base_url
-    - provider=<any_model_id> (no manual model registration needed)
     """
 
     name = "openai"
-    aliases = ["openai_compat", "openai-compatible", "qwen"]
+    aliases = []
 
     def __init__(self, runtime_model=None):
         cfg = AutoElectiveConfig()
         self._api_key = (
             cfg.captcha_api_key
             or os.getenv("OPENAI_API_KEY")
-            or os.getenv("DASHSCOPE_API_KEY")
         )
         self._base_url = (
             cfg.captcha_base_url
@@ -120,7 +118,7 @@ class OpenAICompatRecognizer(CaptchaRecognizer):
             raise RecognizerError(
                 msg=(
                     "Model not configured for OpenAI-compatible captcha OCR. "
-                    "Set [captcha] model_name, or use provider=<model_name>."
+                    "Set [captcha] model_name."
                 )
             )
         self._model = model
@@ -133,7 +131,7 @@ class OpenAICompatRecognizer(CaptchaRecognizer):
             raise RecognizerError(
                 msg=(
                     "API key missing for DashScope-compatible endpoint. "
-                    "Set [captcha] api_key (or OPENAI_API_KEY / DASHSCOPE_API_KEY)."
+                    "Set [captcha] api_key (or OPENAI_API_KEY)."
                 )
             )
 

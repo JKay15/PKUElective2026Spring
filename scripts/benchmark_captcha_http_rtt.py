@@ -120,7 +120,7 @@ def main():
     from requests.exceptions import RequestException
 
     config = AutoElectiveConfig()
-    length = args.code_length or config.captcha_code_length
+    length = args.code_length or config.captcha_code_length_min
     code = _dummy_code(length)
 
     try:

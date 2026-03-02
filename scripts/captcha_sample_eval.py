@@ -13,6 +13,11 @@ if ROOT not in sys.path:
 
 from autoelective.config import AutoElectiveConfig
 from autoelective.captcha import get_recognizer
+from autoelective.captcha.targets import (
+    default_targets_from_config,
+    format_target,
+    parse_targets_csv,
+)
 
 
 def _load_labels(path):
@@ -81,7 +86,11 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate captcha recognizers on sampled images")
     parser.add_argument("--sample-dir", default=None, help="sample directory")
     parser.add_argument("--labels", default=None, help="path to labels json: {sample_id: label}")
-    parser.add_argument("--providers", default=None, help="comma-separated providers (default: config provider + fallback)")
+    parser.add_argument(
+        "--targets",
+        default=None,
+        help="comma-separated targets: provider[:model],provider[:model] (default: config provider + fallback)",
+    )
     parser.add_argument("--limit", type=int, default=0, help="limit number of samples")
     parser.add_argument("--shuffle", action="store_true", help="shuffle samples")
     args = parser.parse_args()
@@ -90,13 +99,14 @@ def main():
     sample_dir = args.sample_dir or config.captcha_sample_dir
     labels = _load_labels(args.labels)
 
-    if args.providers:
-        providers = [p.strip().lower() for p in args.providers.split(",") if p.strip()]
-    else:
-        providers = [config.captcha_provider] + config.captcha_fallback_providers
-    providers = [p for p in providers if p]
-    seen = set()
-    providers = [p for p in providers if not (p in seen or seen.add(p))]
+    try:
+        if args.targets:
+            targets = parse_targets_csv(args.targets)
+        else:
+            targets = default_targets_from_config(config)
+    except ValueError as e:
+        print("[ERROR] invalid targets:", e)
+        return 2
 
     samples = _iter_samples(sample_dir)
     if args.shuffle:
@@ -110,12 +120,13 @@ def main():
         return 1
 
     recognizers = {}
-    for p in providers:
-        recognizers[p] = get_recognizer(p)
+    for provider, model_name in targets:
+        target_name = format_target(provider, model_name)
+        recognizers[target_name] = get_recognizer(provider, model_name=model_name)
 
     results = {}
-    for p in providers:
-        results[p] = {
+    for target_name in recognizers:
+        results[target_name] = {
             "attempts": 0,
             "errors": 0,
             "labeled": 0,
@@ -154,18 +165,18 @@ def main():
                 st["errors"] += 1
 
     print("Sample dir: %s" % sample_dir)
-    print("Providers: %s" % ", ".join(providers))
+    print("Targets: %s" % ", ".join(recognizers.keys()))
     print("Samples: %d" % len(samples))
     print("")
 
-    for p in providers:
-        st = results[p]
+    for target_name in recognizers:
+        st = results[target_name]
         lat = st["latencies"]
         exact = st["exact"]
         labeled = st["labeled"]
         exact_rate = (exact / labeled) if labeled else None
         char_rate = (st["char_match"] / st["char_total"]) if st["char_total"] else None
-        print("== %s ==" % p)
+        print("== %s ==" % target_name)
         print("attempts=%d errors=%d labeled=%d" % (st["attempts"], st["errors"], labeled))
         if labeled:
             print("exact=%.3f char=%.3f" % (exact_rate, char_rate))

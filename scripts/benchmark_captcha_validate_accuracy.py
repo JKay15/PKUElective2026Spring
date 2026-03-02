@@ -95,11 +95,11 @@ def main():
         help="config.ini path (optional). If set, overrides AUTOELECTIVE_CONFIG_INI for this process.",
     )
     parser.add_argument(
-        "--providers",
+        "--targets",
         default=None,
-        help="comma-separated providers (default: config provider + fallbacks)",
+        help="comma-separated targets: provider[:model],provider[:model] (default: config provider + fallbacks)",
     )
-    parser.add_argument("--samples", type=int, default=20, help="samples per provider")
+    parser.add_argument("--samples", type=int, default=20, help="samples per target")
     parser.add_argument("--sleep", type=float, default=0.5, help="sleep seconds between samples")
     args = parser.parse_args()
 
@@ -110,6 +110,11 @@ def main():
 
     from autoelective.config import AutoElectiveConfig
     from autoelective.captcha import get_recognizer
+    from autoelective.captcha.targets import (
+        default_targets_from_config,
+        format_target,
+        parse_targets_csv,
+    )
     from autoelective.exceptions import (
         NotInOperationTimeError,
         SessionExpiredError,
@@ -122,18 +127,20 @@ def main():
     )
 
     cfg = AutoElectiveConfig()
-    providers = None
-    if args.providers:
-        providers = [p.strip().lower() for p in args.providers.split(",") if p.strip()]
-    else:
-        providers = [cfg.captcha_provider] + cfg.captcha_fallback_providers
-    seen = set()
-    providers = [p for p in providers if p and not (p in seen or seen.add(p))]
+    try:
+        if args.targets:
+            targets = parse_targets_csv(args.targets)
+        else:
+            targets = default_targets_from_config(cfg)
+    except ValueError as e:
+        print("[ERROR] invalid targets:", e)
+        return 2
 
     elect = _login(cfg)
 
-    for p in providers:
-        recognizer = get_recognizer(p)
+    for provider, model_name in targets:
+        recognizer = get_recognizer(provider, model_name=model_name)
+        target_name = format_target(provider, model_name)
         ok = 0
         fail = 0
         errors = 0
@@ -142,7 +149,7 @@ def main():
         val_ms = []
         total_ms = []
 
-        print("\n== provider:", p, "==")
+        print("\n== target:", target_name, "==")
         for _ in range(max(0, int(args.samples))):
             try:
                 t0 = time.time()

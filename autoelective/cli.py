@@ -7,6 +7,7 @@ from optparse import OptionParser
 from threading import Thread
 import time
 import os
+import signal
 from multiprocessing import Queue
 from . import __version__, __date__
 
@@ -83,15 +84,28 @@ def create_default_threads(options, args, environ):
 def run():
 
     from .environ import Environ
-    from .logger import ConsoleLogger
 
     environ = Environ()
-    cout = ConsoleLogger("cli")
 
     parser = create_default_parser()
     options, args = parser.parse_args()
 
     setup_default_environ(options, args, environ)
+
+    # Import logger only after config path is set by `-c/--config`.
+    # `logger.py` instantiates AutoElectiveConfig at import time.
+    from .logger import ConsoleLogger
+
+    cout = ConsoleLogger("cli")
+
+    _shutdown = {"signal": None}
+
+    def _handle_shutdown_signal(signum, frame):
+        try:
+            _shutdown["signal"] = signal.Signals(signum).name
+        except Exception:
+            _shutdown["signal"] = "SIGNAL_%s" % signum
+        raise KeyboardInterrupt
 
     preflight_env = (os.getenv("AUTOELECTIVE_PREFLIGHT") or "").strip().lower()
     enable_preflight = bool(options.preflight) or (preflight_env in {"1", "true", "yes", "on"})
@@ -150,6 +164,9 @@ def run():
     if options.with_monitor:
         thread_specs.append(("Monitor", "monitor_thread", run_monitor))
 
+    signal.signal(signal.SIGINT, _handle_shutdown_signal)
+    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+
     last_restart = {}
     try:
         while True:
@@ -167,4 +184,5 @@ def run():
                 setattr(environ, attr, nt)
                 last_restart[name] = now
     except KeyboardInterrupt as e:
-        pass
+        sig = _shutdown["signal"] or "SIGINT"
+        cout.warning("Received %s, preparing graceful shutdown" % sig)

@@ -393,10 +393,11 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         v_min = self.get_optional("captcha", "code_length_min")
         v_max = self.get_optional("captcha", "code_length_max")
         if v_min is None or v_min == "":
-            # If user only sets max, default min to 1.
+            # Default range is 4..6.
+            # If user only sets max, default min to 4.
             if v_max is not None and v_max != "":
-                return 1
-            return self.captcha_code_length
+                return 4
+            return 4
         try:
             v_min = int(v_min)
         except ValueError:
@@ -415,7 +416,7 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
                 except ValueError:
                     raise UserInputException("Invalid code_length_min: %r" % v_min)
                 return max(1, v_min_i)
-            return self.captcha_code_length
+            return 6
         try:
             v_max = int(v_max)
         except ValueError:

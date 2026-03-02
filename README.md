@@ -141,6 +141,15 @@ api_key=
 base_url=http://127.0.0.1:8000/v1
 ```
 
+### 验证码长度参数
+
+`code_length_min` / `code_length_max` 用于约束 OCR 提取结果的目标长度范围。
+
+- 默认值：`4` 到 `6`
+- 作用：帮助从模型输出中筛选候选字符串，降低“多余字符/噪声文本”被当作验证码的概率
+- 适配建议：如果你知道目标系统验证码固定 4 位，可改成 `4` 到 `4`
+- 兼容项：旧参数 `code_length` 仍可用（固定长度），但建议优先使用 `code_length_min/max`
+
 ### 1) 识别链（primary + fallbacks）
 
 启动时会把 `provider + fallback_providers` 组装成一个有序列表（去重后保序）：

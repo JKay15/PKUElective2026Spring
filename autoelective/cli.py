@@ -98,13 +98,28 @@ def run():
 
     cout = ConsoleLogger("cli")
 
-    _shutdown = {"signal": None}
+    _shutdown = {"signal": None, "count": 0}
 
     def _handle_shutdown_signal(signum, frame):
         try:
-            _shutdown["signal"] = signal.Signals(signum).name
+            sig_name = signal.Signals(signum).name
         except Exception:
-            _shutdown["signal"] = "SIGNAL_%s" % signum
+            sig_name = "SIGNAL_%s" % signum
+        _shutdown["signal"] = sig_name
+        _shutdown["count"] += 1
+        if _shutdown["count"] >= 2:
+            # If the first graceful shutdown is blocked by long I/O, allow user
+            # to press Ctrl+C again for immediate hard exit.
+            try:
+                os.write(
+                    2,
+                    ("\n[WARNING] cli, Received %s again, force exit now\n" % sig_name).encode(
+                        "utf-8"
+                    ),
+                )
+            except Exception:
+                pass
+            os._exit(128 + int(signum))
         raise KeyboardInterrupt
 
     preflight_env = (os.getenv("AUTOELECTIVE_PREFLIGHT") or "").strip().lower()

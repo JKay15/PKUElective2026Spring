@@ -317,6 +317,19 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         return self.get_optional("captcha", "model_name")
 
     @property
+    def captcha_openai_models(self):
+        vals = self.get_optional_list("captcha", "openai_models")
+        out = []
+        seen = set()
+        for v in vals:
+            m = (v or "").strip()
+            if not m or m in seen:
+                continue
+            seen.add(m)
+            out.append(m)
+        return out
+
+    @property
     def captcha_prompt(self):
         return self.get_optional("captcha", "prompt")
 

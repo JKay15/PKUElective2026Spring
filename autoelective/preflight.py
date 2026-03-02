@@ -76,6 +76,20 @@ def _has_openai_compat_key(config) -> bool:
     return not _is_blank(getattr(config, "captcha_api_key", None))
 
 
+def _has_openai_model_target(config) -> bool:
+    model_name = (getattr(config, "captcha_model_name", None) or "").strip()
+    if model_name:
+        return True
+    try:
+        models = list(getattr(config, "captcha_openai_models", None) or [])
+    except Exception:
+        models = []
+    for m in models:
+        if (m or "").strip():
+            return True
+    return False
+
+
 def _openai_base_url(config) -> str:
     v = getattr(config, "captcha_base_url", None) or "https://dashscope.aliyuncs.com/compatible-mode/v1"
     return str(v).strip().lower()
@@ -117,6 +131,26 @@ def run_preflight(config) -> list[PreflightIssue]:
                 % (old_key, new_key),
                 "captcha.%s" % old_key,
             )
+
+    try:
+        models = list(getattr(config, "captcha_openai_models", None) or [])
+    except Exception as e:
+        models = []
+        _add(
+            "ERROR",
+            "captcha_openai_models_read_failed",
+            f"Unable to read captcha.openai_models: {e}",
+            "captcha.openai_models",
+        )
+    for m in models:
+        if _is_blank(m):
+            _add(
+                "ERROR",
+                "captcha_openai_models_invalid",
+                "captcha.openai_models contains an empty model entry.",
+                "captcha.openai_models",
+            )
+            break
 
     # [captcha] code length range
     try:
@@ -201,11 +235,11 @@ def run_preflight(config) -> list[PreflightIssue]:
                     "Missing required config for OpenAI-compatible provider: captcha.base_url",
                     "captcha.base_url",
                 )
-            if _is_blank(getattr(config, "captcha_model_name", None)):
+            if not _has_openai_model_target(config):
                 _add(
                     "ERROR",
                     "captcha_key_missing",
-                    "Missing required config when captcha.provider=openai: captcha.model_name",
+                    "Missing required config when captcha.provider=openai: captcha.model_name or captcha.openai_models",
                     "captcha.model_name",
                 )
             if not _has_openai_compat_key(config):
@@ -272,11 +306,11 @@ def run_preflight(config) -> list[PreflightIssue]:
                     "Missing required config for OpenAI-compatible fallback 'openai': captcha.base_url",
                     "captcha.base_url",
                 )
-            if _is_blank(getattr(config, "captcha_model_name", None)):
+            if not _has_openai_model_target(config):
                 _add(
                     "ERROR",
                     "captcha_fallback_key_missing",
-                    "Missing required config for fallback 'openai': captcha.model_name",
+                    "Missing required config for fallback 'openai': captcha.model_name or captcha.openai_models",
                     "captcha.model_name",
                 )
             if not _has_openai_compat_key(config):

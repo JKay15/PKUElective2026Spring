@@ -64,8 +64,41 @@ def parse_targets_csv(text: str) -> list[tuple[str, str | None]]:
 
 def default_targets_from_config(config) -> list[tuple[str, str | None]]:
     providers = [config.captcha_provider] + list(config.captcha_fallback_providers or [])
+    openai_models = []
+    try:
+        openai_models = list(getattr(config, "captcha_openai_models", None) or [])
+    except Exception:
+        openai_models = []
+    base_model = ""
+    try:
+        base_model = (getattr(config, "captcha_model_name", None) or "").strip()
+    except Exception:
+        base_model = ""
     out = []
     seen = set()
+
+    def _add_openai_targets():
+        models = []
+        if base_model:
+            models.append(base_model)
+        for m in openai_models:
+            m = (m or "").strip()
+            if m and m not in models:
+                models.append(m)
+        if not models:
+            _add_target(("openai", None))
+            return
+        for m in models:
+            _add_target(("openai", m))
+
+    def _add_target(target: tuple[str, str | None]):
+        provider, model_name = target
+        key = (provider, model_name or "")
+        if key in seen:
+            return
+        seen.add(key)
+        out.append((provider, model_name))
+
     for provider in providers:
         provider = (provider or "").strip().lower()
         if not provider:
@@ -75,11 +108,10 @@ def default_targets_from_config(config) -> list[tuple[str, str | None]]:
                 "Unsupported captcha provider %r in config. Allowed providers: %s."
                 % (provider, ", ".join(ALLOWED_CAPTCHA_PROVIDERS))
             )
-        key = (provider, "")
-        if key in seen:
+        if provider == "openai":
+            _add_openai_targets()
             continue
-        seen.add(key)
-        out.append((provider, None))
+        _add_target((provider, None))
     if not out:
         raise ValueError("No captcha providers configured.")
     return out

@@ -23,6 +23,7 @@ from .config import AutoElectiveConfig
 from .logger import ConsoleLogger, FileLogger
 from .course import Course
 from .captcha import get_recognizer
+from .captcha.targets import default_targets_from_config, format_target, parse_target_token
 from .captcha.adaptive import CaptchaAdaptiveManager
 from . import rate_limit
 from .parser import get_tables, get_courses, get_courses_with_detail, get_sida
@@ -84,15 +85,32 @@ mkdir(_USER_WEB_LOG_DIR)
 # build recognizer chain
 _recognizer_names = []
 _recognizer_seen = set()
-for _name in [config.captcha_provider] + config.captcha_fallback_providers:
-    _name = (_name or "").strip().lower()
+try:
+    _runtime_targets = default_targets_from_config(config)
+except Exception:
+    _runtime_targets = [("openai", None)]
+for _provider, _model_name in _runtime_targets:
+    _name = format_target(_provider, _model_name)
     if not _name or _name in _recognizer_seen:
         continue
     _recognizer_seen.add(_name)
     _recognizer_names.append(_name)
 if not _recognizer_names:
     _recognizer_names = ["openai"]
-_recognizer_map = {n: get_recognizer(n) for n in _recognizer_names}
+
+
+def _build_recognizer(target_name):
+    try:
+        provider, model_name = parse_target_token(target_name)
+    except Exception:
+        # Keep probe/test doubles working when custom target names are patched in tests.
+        return get_recognizer(target_name)
+    if model_name is None:
+        return get_recognizer(provider)
+    return get_recognizer(provider, model_name=model_name)
+
+
+_recognizer_map = {n: _build_recognizer(n) for n in _recognizer_names}
 recognizers = [_recognizer_map[n] for n in _recognizer_names]
 recognizer_index = 0
 recognizer = recognizers[0]
@@ -981,7 +999,7 @@ def _report_adaptive_state():
             cout.info("Adaptive H: %.3f" % h_val)
         stats = snap.get("stats") or {}
         cout.info("Adaptive stats:")
-        cout.info("  provider | count | succ | fail | streak | p_hat | t_hat | h_hat | score")
+        cout.info("  target                   | count | succ | fail | streak | p_hat | t_hat | h_hat | score")
         for name in order:
             st = stats.get(name) or {}
             count = st.get("count", 0)
@@ -993,7 +1011,7 @@ def _report_adaptive_state():
             h_hat = st.get("h_latency")
             score = st.get("score")
             cout.info(
-                "  %-8s | %5d | %4d | %4d | %6d | %5s | %5s | %5s | %5s"
+                "  %-24s | %5d | %4d | %4d | %6d | %5s | %5s | %5s | %5s"
                 % (
                     name,
                     count,
@@ -1423,7 +1441,7 @@ def _run_captcha_probe_loop(stop_event, pause_event):
 
             recognizer = probe_recognizers.get(provider)
             if recognizer is None:
-                recognizer = get_recognizer(provider)
+                recognizer = _build_recognizer(provider)
                 probe_recognizers[provider] = recognizer
 
             t0 = time.time()

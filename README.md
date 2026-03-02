@@ -121,12 +121,19 @@ uv run python scripts/phase1_capture_replay.py -c config.phase1.ini --pages 3 --
 目标就是：只填 `model_name / api_key / base_url` 三项即可跑。  
 不需要手动注册模型，也不需要额外改代码。
 
+如果你要启用“同 provider 多模型动态排序”，再加一项：
+
+- `openai_models`：逗号分隔的额外模型列表（可选）
+- 运行时 target 会展开为：`openai:model_name` + `openai:openai_models...`
+- adaptive/probe 统计按 target 独立计数，不会把不同模型混在一起
+
 示例 A：标准写法（推荐）
 
 ```ini
 [captcha]
 provider=openai
 model_name=qwen3-vl-flash
+openai_models=qwen3-vl-plus,qwen-vl-ocr-latest
 api_key=YOUR_DASHSCOPE_KEY
 base_url=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
@@ -157,6 +164,7 @@ base_url=http://127.0.0.1:8000/v1
 [captcha]
 provider=openai
 model_name=qwen3-vl-flash
+openai_models=qwen3-vl-plus,qwen-vl-ocr-latest
 fallback_providers=gemini,baidu
 ```
 

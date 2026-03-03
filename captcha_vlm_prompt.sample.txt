@@ -1,8 +1,11 @@
 # Optional local prompt for VLM captcha recognition.
-#
+# 
 # Usage:
 # 1) Copy this file to `captcha_vlm_prompt.local.txt` in repository root.
 # 2) Replace this content with your own prompt text.
+# 3) This prompt is applied to:
+#    - openai VLM models
+#    - gemini provider
 #
 # If `captcha_vlm_prompt.local.txt` is missing or empty,
 # autoelective will not send any prompt text for VLM models.

@@ -150,8 +150,8 @@ base_url=http://127.0.0.1:8000/v1
 
 ### VLM Prompt（仅本地文件）
 
-- 仅 `openai` 下的 **VLM 模型**会附带 prompt（例如 `Qwen/Qwen3-VL-30B-A3B-Instruct`）。
-- **OCR 模型**（模型名包含 `ocr`）默认不附带 prompt，只发图片。
+- `openai` 下的 **VLM 模型** 和 `gemini` provider 都会读取本地 prompt。
+- `openai` 下的 **OCR 模型**（模型名包含 `ocr`）默认不附带 prompt，只发图片。
 - prompt 读取位置：仓库根目录 `captcha_vlm_prompt.local.txt`（默认不会提交到 GitHub）。
 - 若该文件不存在或为空，默认不发送 prompt。
 - 可参考模板文件：`captcha_vlm_prompt.sample.txt`。

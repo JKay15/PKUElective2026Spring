@@ -72,6 +72,29 @@ def _extract_code_candidate(text, min_len, max_len):
     return candidates[-1] if candidates else ""
 
 
+def _repo_root_dir():
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _local_vlm_prompt_path():
+    custom = (os.getenv("AUTOELECTIVE_GEMINI_VLM_PROMPT_FILE") or "").strip()
+    if custom:
+        return custom
+    custom = (os.getenv("AUTOELECTIVE_VLM_PROMPT_FILE") or "").strip()
+    if custom:
+        return custom
+    return os.path.join(_repo_root_dir(), "captcha_vlm_prompt.local.txt")
+
+
+def _load_local_vlm_prompt():
+    path = _local_vlm_prompt_path()
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            return fp.read().strip()
+    except OSError:
+        return ""
+
+
 @register_recognizer
 class GeminiVLMRecognizer(CaptchaRecognizer):
     name = "gemini"
@@ -109,6 +132,9 @@ class GeminiVLMRecognizer(CaptchaRecognizer):
             f"The value must be {len_rule} (A-Z, 0-9) with no spaces.\n"
             "If uncertain, make your best guess.\n"
         )
+        local_prompt = _load_local_vlm_prompt()
+        if local_prompt:
+            prompt = prompt + "\n" + local_prompt + "\n"
         url = "https://generativelanguage.googleapis.com/v1beta/models/" + self._model + ":generateContent"
         payload = {
             "contents": [

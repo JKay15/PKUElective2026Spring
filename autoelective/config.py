@@ -330,10 +330,6 @@ class AutoElectiveConfig(BaseConfig, metaclass=Singleton):
         return out
 
     @property
-    def captcha_prompt(self):
-        return self.get_optional("captcha", "prompt")
-
-    @property
     def captcha_request_timeout(self):
         v = self.get_optional("captcha", "request_timeout")
         if v is None or v == "":

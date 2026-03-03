@@ -70,17 +70,28 @@ def _extract_code_candidate(text, min_len, max_len):
     return candidates[-1] if candidates else ""
 
 
-def _default_prompt(min_len, max_len):
-    if min_len == max_len:
-        len_rule = "exactly %d characters" % min_len
-    else:
-        len_rule = "between %d and %d characters" % (min_len, max_len)
-    return (
-        "Recognize the text in this captcha image.\n"
-        "Return only the recognized text.\n"
-        "Do not output JSON, explanation, punctuation, or extra content.\n"
-        "Use only A-Z and 0-9, %s.\n" % len_rule
-    )
+def _repo_root_dir():
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _local_vlm_prompt_path():
+    custom = (os.getenv("AUTOELECTIVE_VLM_PROMPT_FILE") or "").strip()
+    if custom:
+        return custom
+    return os.path.join(_repo_root_dir(), "captcha_vlm_prompt.local.txt")
+
+
+def _load_local_vlm_prompt():
+    path = _local_vlm_prompt_path()
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            return fp.read().strip()
+    except OSError:
+        return ""
+
+
+def _is_likely_ocr_model(model_name):
+    return "ocr" in str(model_name or "").lower()
 
 
 @register_recognizer
@@ -122,9 +133,11 @@ class OpenAICompatRecognizer(CaptchaRecognizer):
                 )
             )
         self._model = model
-        self._prompt = (cfg.captcha_prompt or "").strip() or _default_prompt(
-            self._min_len, self._max_len
-        )
+        self._is_ocr_model = _is_likely_ocr_model(self._model)
+        if self._is_ocr_model:
+            self._prompt = ""
+        else:
+            self._prompt = _load_local_vlm_prompt()
         self._session = requests.Session()
 
         if not self._api_key and "dashscope.aliyuncs.com" in self._base_url:
@@ -138,21 +151,23 @@ class OpenAICompatRecognizer(CaptchaRecognizer):
     def recognize(self, raw):
         img = _to_jpeg_bytes(raw)
         url = self._base_url + "/chat/completions"
+        content = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:image/jpeg;base64,"
+                    + base64.b64encode(img).decode("utf-8")
+                },
+            }
+        ]
+        if self._prompt:
+            content.append({"type": "text", "text": self._prompt})
         payload = {
             "model": self._model,
             "messages": [
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": "data:image/jpeg;base64,"
-                                + base64.b64encode(img).decode("utf-8")
-                            },
-                        },
-                        {"type": "text", "text": self._prompt},
-                    ],
+                    "content": content,
                 }
             ],
             "temperature": 0,

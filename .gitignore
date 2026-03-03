@@ -245,3 +245,4 @@ cython_debug/
 
 config.ini
 config.phase1.ini
+captcha_vlm_prompt.local.txt

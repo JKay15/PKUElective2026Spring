@@ -5,6 +5,7 @@
 
 from optparse import OptionParser
 from threading import Thread
+import threading
 import time
 import os
 import signal
@@ -98,7 +99,7 @@ def run():
 
     cout = ConsoleLogger("cli")
 
-    _shutdown = {"signal": None, "count": 0}
+    _shutdown = {"signal": None, "signum": None, "count": 0}
 
     def _handle_shutdown_signal(signum, frame):
         try:
@@ -106,6 +107,7 @@ def run():
         except Exception:
             sig_name = "SIGNAL_%s" % signum
         _shutdown["signal"] = sig_name
+        _shutdown["signum"] = int(signum)
         _shutdown["count"] += 1
         if _shutdown["count"] >= 2:
             # If the first graceful shutdown is blocked by long I/O, allow user
@@ -201,3 +203,41 @@ def run():
     except KeyboardInterrupt as e:
         sig = _shutdown["signal"] or "SIGINT"
         cout.warning("Received %s, preparing graceful shutdown" % sig)
+        # Best-effort graceful wait; then force exit to avoid stuck child process.
+        grace_s = 2.0
+        try:
+            v = (os.getenv("AUTOELECTIVE_SHUTDOWN_GRACE_SECONDS") or "").strip()
+            if v:
+                grace_s = max(0.0, float(v))
+        except Exception:
+            grace_s = 2.0
+        deadline = time.time() + grace_s
+        watched = ["iaaa_loop_thread", "elective_loop_thread"]
+        if options.with_monitor:
+            watched.append("monitor_thread")
+        can_force_exit = True
+        for attr in watched:
+            t = getattr(environ, attr, None)
+            if t is not None and not isinstance(t, threading.Thread):
+                # Unit tests may patch Thread with fakes; don't hard-exit test runner.
+                can_force_exit = False
+                break
+        waiter = threading.Event()
+        while time.time() < deadline:
+            alive = False
+            for attr in watched:
+                t = getattr(environ, attr, None)
+                if t is not None and t.is_alive():
+                    alive = True
+                    break
+            if not alive:
+                break
+            waiter.wait(0.05)
+
+        code = 128 + int(_shutdown["signum"] or signal.SIGINT)
+        if can_force_exit:
+            try:
+                os._exit(code)
+            except Exception:
+                raise SystemExit(code)
+        return
